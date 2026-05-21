@@ -147,19 +147,19 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:global.stun.twilio.com:3478' },
             {
-              urls: 'turn:openrelay.metered.ca:80',
-              username: 'openrelayproject',
-              credential: 'openrelayproject'
+              urls: 'turn:watchwithyou.metered.live:80',
+              username: '932c00b398d17a448e4a61e1',
+              credential: 'iY0PjfIIWDy0Ogwg'
             },
             {
-              urls: 'turn:openrelay.metered.ca:443',
-              username: 'openrelayproject',
-              credential: 'openrelayproject'
+              urls: 'turn:watchwithyou.metered.live:443',
+              username: '932c00b398d17a448e4a61e1',
+              credential: 'iY0PjfIIWDy0Ogwg'
             },
             {
-              urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-              username: 'openrelayproject',
-              credential: 'openrelayproject'
+              urls: 'turn:watchwithyou.metered.live:443?transport=tcp',
+              username: '932c00b398d17a448e4a61e1',
+              credential: 'iY0PjfIIWDy0Ogwg'
             }
           ]
         }
