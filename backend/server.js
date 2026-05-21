@@ -81,19 +81,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('answer', (data) => {
-    socket.to(data.target).emit('answer', {
-      sender: socket.id,
-      answer: data.answer,
-    });
-  });
 
-  socket.on('ice_candidate', (data) => {
-    socket.to(data.target).emit('ice_candidate', {
-      sender: socket.id,
-      candidate: data.candidate,
-    });
-  });
 
   // Disconnect logic
   socket.on('disconnect', () => {

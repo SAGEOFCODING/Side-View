@@ -38,6 +38,13 @@ export function VideoPlayer({ stream, muted = false, ...props }: VideoPlayerProp
       video.srcObject = null;
       setPlayBlocked(false);
     }
+    
+    return () => {
+      // Clean up properly on stream change
+      if (video.srcObject === stream) {
+        video.srcObject = null;
+      }
+    };
   }, [stream]);
 
   const handleManualPlay = () => {

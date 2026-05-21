@@ -105,12 +105,14 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     });
   }, [handleIncomingStream]);
 
-  // Setup a newly discovered remote user — map their IDs and call them
-  const setupRemoteUser = useCallback((userId: string, peerId: string) => {
+  // Setup a newly discovered remote user — map their IDs and conditionally call them
+  const setupRemoteUser = useCallback((userId: string, peerId: string, initiateCall: boolean = true) => {
     addRemoteUser(userId);
     peerToUserMap.current[peerId] = userId;
     userToPeerMap.current[userId] = peerId;
     
+    if (!initiateCall) return;
+
     // Call them with our webcam stream if we have one
     const currentStream = useStore.getState().localUser.stream;
     if (currentStream) {
@@ -190,7 +192,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
           console.log(`[WebRTC] Received existing users:`, users);
           for (const user of users) {
             if (user.peerId) {
-              setupRemoteUser(user.userId, user.peerId);
+              setupRemoteUser(user.userId, user.peerId, true); // Newcomer calls existing users
             }
           }
         });
@@ -198,7 +200,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         // Handle a new user joining after us
         socketRef.current.on('user_joined', ({ userId, peerId }: { userId: string; peerId: string }) => {
           console.log(`[WebRTC] User joined: ${userId} (peer: ${peerId})`);
-          setupRemoteUser(userId, peerId);
+          setupRemoteUser(userId, peerId, false); // Existing users DO NOT call newcomer, preventing race condition
         });
 
         socketRef.current.on('user_left', (userId: string) => {
@@ -342,9 +344,9 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       });
 
       // When the user clicks "Stop sharing" in the browser's native UI
-      screenStream.getVideoTracks()[0].onended = () => {
-        stopScreenShare(screenStream);
-      };
+      const videoTrack = screenStream.getVideoTracks()[0];
+      const handleTrackEnd = () => stopScreenShare(screenStream);
+      videoTrack.addEventListener('ended', handleTrackEnd);
     } catch (err) {
       console.error('Error sharing screen', err);
     }
