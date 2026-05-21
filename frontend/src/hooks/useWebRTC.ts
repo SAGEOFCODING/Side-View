@@ -37,14 +37,22 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         return { stream: null, error: 'Browser does not support media devices. Are you using HTTPS or localhost?' };
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        } 
-      });
+      
+      // Add a 15-second timeout in case the permission prompt hangs silently
+      const stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({ 
+          video: true, 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Permission prompt timed out. Please check your browser address bar for a blocked camera icon.')), 15000)
+        )
+      ]);
+      
       setLocalStream(stream);
       return { stream, error: null };
     } catch (err: any) {
