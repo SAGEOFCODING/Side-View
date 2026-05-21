@@ -171,9 +171,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         console.log(`[WebRTC] PeerJS open with id: ${id}`);
         
         // Now connect to Socket.io for room discovery
-        socketRef.current = io(SOCKET_SERVER_URL, {
-          transports: ['websocket'], // FORCE WebSockets to avoid Cloud Run Session ID polling mismatches
-        });
+        socketRef.current = io(SOCKET_SERVER_URL);
         
         socketRef.current.on('connect', () => {
           console.log(`[WebRTC] Socket connected: ${socketRef.current!.id}`);
