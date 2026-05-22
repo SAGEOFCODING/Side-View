@@ -170,13 +170,18 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     // Handle incoming remote tracks
     pc.ontrack = (event) => {
       console.log(`[WebRTC] Received remote ${type} track from ${targetUserId}`);
-      const remoteStream = event.streams[0];
-      if (remoteStream) {
-        if (type === 'webcam') {
-          setRemoteStream(targetUserId, remoteStream);
-        } else {
-          setRemoteScreenStream(targetUserId, remoteStream);
-        }
+      let remoteStream = event.streams[0];
+      
+      if (!remoteStream) {
+         const existingUser = useStore.getState().remoteUsers[targetUserId];
+         remoteStream = (type === 'webcam' ? existingUser?.stream : existingUser?.screenStream) || new MediaStream();
+         remoteStream.addTrack(event.track);
+      }
+
+      if (type === 'webcam') {
+        setRemoteStream(targetUserId, remoteStream);
+      } else {
+        setRemoteScreenStream(targetUserId, remoteStream);
       }
     };
 
@@ -263,13 +268,18 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
       pc.ontrack = (event) => {
         console.log(`[WebRTC] Received ${connectionType} track from incoming connection: ${senderId}`);
-        const remoteStream = event.streams[0];
-        if (remoteStream) {
-          if (connectionType === 'webcam') {
-            setRemoteStream(senderId, remoteStream);
-          } else {
-            setRemoteScreenStream(senderId, remoteStream);
-          }
+        let remoteStream = event.streams[0];
+        
+        if (!remoteStream) {
+           const existingUser = useStore.getState().remoteUsers[senderId];
+           remoteStream = (connectionType === 'webcam' ? existingUser?.stream : existingUser?.screenStream) || new MediaStream();
+           remoteStream.addTrack(event.track);
+        }
+
+        if (connectionType === 'webcam') {
+          setRemoteStream(senderId, remoteStream);
+        } else {
+          setRemoteScreenStream(senderId, remoteStream);
         }
       };
 
@@ -477,32 +487,19 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
   const startScreenShare = useCallback(async () => {
     let screenStream: MediaStream;
     try {
-      // Tier 1: Try explicit high-quality system audio
+      // Tier 1: Try standard audio
       screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          systemAudio: 'include'
-        } as any
+        audio: true
       });
     } catch (err: unknown) {
-      console.warn('[WebRTC] Tier 1 advanced audio share failed. Attempting Tier 2 (standard audio)...');
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      console.warn('[WebRTC] Tier 1 standard audio failed. Attempting Tier 2 (video only)...', error);
+      if (error.name === 'NotAllowedError') {
+        return;
+      }
+      
       try {
-        // Tier 2: Try standard audio boolean
-        screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
-          audio: true
-        });
-      } catch (err2: unknown) {
-        const error = err2 instanceof Error ? err2 : new Error('Unknown error');
-        console.warn('[WebRTC] Tier 2 standard audio failed. Attempting Tier 3 (video only)...', error);
-        if (error.name === 'NotAllowedError') {
-          return;
-        }
-        
-        try {
           // Tier 3: Fallback to video only
           screenStream = await navigator.mediaDevices.getDisplayMedia({
             video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } },
@@ -514,7 +511,6 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
           return;
         }
       }
-    }
 
     try {
       setLocalScreenStream(screenStream);
