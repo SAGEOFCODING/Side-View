@@ -475,33 +475,41 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
   const startScreenShare = useCallback(async () => {
     let screenStream: MediaStream;
     try {
+      // Tier 1: Try explicit high-quality system audio
       screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { ideal: 1920, max: 1920 },
-          height: { ideal: 1080, max: 1080 },
-          frameRate: { ideal: 30, max: 60 }
-        },
-        audio: true
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          systemAudio: 'include'
+        } as any
       });
     } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
-      console.warn('[WebRTC] Screen share with audio failed, attempting fallback...', error);
-      if (error.name === 'NotAllowedError') {
-        return;
-      }
-      
+      console.warn('[WebRTC] Tier 1 advanced audio share failed. Attempting Tier 2 (standard audio)...');
       try {
+        // Tier 2: Try standard audio boolean
         screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 },
-            frameRate: { ideal: 30, max: 30 }
-          },
-          audio: false
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
+          audio: true
         });
-      } catch (fallbackErr) {
-        console.error('[WebRTC] Fallback screen share failed:', fallbackErr);
-        return;
+      } catch (err2: unknown) {
+        const error = err2 instanceof Error ? err2 : new Error('Unknown error');
+        console.warn('[WebRTC] Tier 2 standard audio failed. Attempting Tier 3 (video only)...', error);
+        if (error.name === 'NotAllowedError') {
+          return;
+        }
+        
+        try {
+          // Tier 3: Fallback to video only
+          screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } },
+            audio: false
+          });
+        } catch (fallbackErr) {
+          console.error('[WebRTC] Fallback screen share failed:', fallbackErr);
+          return;
+        }
       }
     }
 
