@@ -53,6 +53,17 @@ export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPl
     };
   }, [stream]);
 
+  // Explicitly force the video element muted state to sync with the React prop.
+  // This bypasses a known bug in React where dynamically changing muted={false} fails to actually unmute the HTML element.
+  useEffect(() => {
+    if (internalRef.current) {
+      internalRef.current.muted = muted;
+      if (!muted) {
+        internalRef.current.volume = 1.0;
+      }
+    }
+  }, [muted]);
+
   const handleManualPlay = () => {
     if (videoRef.current) {
       videoRef.current.play().catch(() => {

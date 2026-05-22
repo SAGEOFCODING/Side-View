@@ -170,12 +170,13 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     // Handle incoming remote tracks
     pc.ontrack = (event) => {
       console.log(`[WebRTC] Received remote ${type} track from ${targetUserId}`);
-      const tracks = pc.getReceivers().map(r => r.track).filter(Boolean);
-      const remoteStream = new MediaStream(tracks);
-      if (type === 'webcam') {
-        setRemoteStream(targetUserId, remoteStream);
-      } else {
-        setRemoteScreenStream(targetUserId, remoteStream);
+      const remoteStream = event.streams[0];
+      if (remoteStream) {
+        if (type === 'webcam') {
+          setRemoteStream(targetUserId, remoteStream);
+        } else {
+          setRemoteScreenStream(targetUserId, remoteStream);
+        }
       }
     };
 
@@ -262,12 +263,13 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
       pc.ontrack = (event) => {
         console.log(`[WebRTC] Received ${connectionType} track from incoming connection: ${senderId}`);
-        const tracks = pc.getReceivers().map(r => r.track).filter(Boolean);
-        const remoteStream = new MediaStream(tracks);
-        if (connectionType === 'webcam') {
-          setRemoteStream(senderId, remoteStream);
-        } else {
-          setRemoteScreenStream(senderId, remoteStream);
+        const remoteStream = event.streams[0];
+        if (remoteStream) {
+          if (connectionType === 'webcam') {
+            setRemoteStream(senderId, remoteStream);
+          } else {
+            setRemoteScreenStream(senderId, remoteStream);
+          }
         }
       };
 
@@ -506,6 +508,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
             video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } },
             audio: false
           });
+          alert("Screen audio capture was blocked by your browser or OS (e.g., macOS Entire Screen). Continuing with video only.");
         } catch (fallbackErr) {
           console.error('[WebRTC] Fallback screen share failed:', fallbackErr);
           return;
@@ -516,6 +519,10 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     try {
       setLocalScreenStream(screenStream);
       
+      if (screenStream.getAudioTracks().length === 0) {
+        console.warn("[WebRTC] Screen stream was acquired, but it contains NO audio tracks.");
+      }
+
       // Connect screen stream to all existing remote users
       Object.keys(useStore.getState().remoteUsers).forEach((remoteUserId) => {
         initiateConnection(remoteUserId, 'screen');
