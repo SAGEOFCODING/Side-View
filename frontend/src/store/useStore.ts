@@ -43,6 +43,7 @@ const initialLocalUser: UserState = {
   screenStream: null,
   micMuted: false,
   cameraOff: false,
+  name: '',
 };
 
 export const useStore = create<RoomState>((set) => ({
@@ -80,7 +81,7 @@ export const useStore = create<RoomState>((set) => ({
     return {
       remoteUsers: {
         ...state.remoteUsers,
-        [id]: { id, isHost: false, stream: null, screenStream: null, micMuted: false, cameraOff: false, ...flags }
+        [id]: { id, isHost: false, stream: null, screenStream: null, micMuted: false, cameraOff: false, name: '', ...flags }
       }
     };
   }),

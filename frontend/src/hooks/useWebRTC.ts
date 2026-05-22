@@ -61,6 +61,9 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
   // Queue ICE candidates arriving before connection is ready or remoteDescription is set
   const pendingCandidatesRef = useRef<Record<string, RTCIceCandidateInit[]>>({});
 
+  // Track accumulated remote streams by connection key so ontrack can merge tracks
+  const remoteStreamsRef = useRef<Record<string, MediaStream>>({});
+
   const {
     setSocketId,
     setLocalStream,
@@ -113,6 +116,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     }
     const key = `${type}-${userId}`;
     delete pendingCandidatesRef.current[key];
+    delete remoteStreamsRef.current[key];
   }, []);
 
   const processPendingCandidates = useCallback(async (senderId: string, connectionType: 'webcam' | 'screen', pc: RTCPeerConnection) => {
@@ -169,19 +173,29 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
     // Handle incoming remote tracks
     pc.ontrack = (event) => {
-      console.log(`[WebRTC] Received remote ${type} track from ${targetUserId}`);
-      let remoteStream = event.streams[0];
+      const track = event.track;
+      const streamKey = `${type}-${targetUserId}`;
+      console.log(`[WebRTC] Received remote ${type} track from ${targetUserId}: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}, readyState=${track.readyState}`);
       
-      if (!remoteStream) {
-         const existingUser = useStore.getState().remoteUsers[targetUserId];
-         remoteStream = (type === 'webcam' ? existingUser?.stream : existingUser?.screenStream) || new MediaStream();
-         remoteStream.addTrack(event.track);
+      // Get or create the accumulated stream for this connection
+      if (!remoteStreamsRef.current[streamKey]) {
+        remoteStreamsRef.current[streamKey] = event.streams[0] || new MediaStream();
       }
+      const accumulatedStream = remoteStreamsRef.current[streamKey];
+      
+      // Add the track if not already present
+      if (!accumulatedStream.getTrackById(track.id)) {
+        accumulatedStream.addTrack(track);
+      }
+      
+      // Create a new MediaStream from all accumulated tracks — forces Zustand to see a new object reference
+      const freshStream = new MediaStream(accumulatedStream.getTracks());
+      console.log(`[WebRTC] Updated ${type} stream for ${targetUserId}: videoTracks=${freshStream.getVideoTracks().length}, audioTracks=${freshStream.getAudioTracks().length}`);
 
       if (type === 'webcam') {
-        setRemoteStream(targetUserId, remoteStream);
+        setRemoteStream(targetUserId, freshStream);
       } else {
-        setRemoteScreenStream(targetUserId, remoteStream);
+        setRemoteScreenStream(targetUserId, freshStream);
       }
     };
 
@@ -267,19 +281,29 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       };
 
       pc.ontrack = (event) => {
-        console.log(`[WebRTC] Received ${connectionType} track from incoming connection: ${senderId}`);
-        let remoteStream = event.streams[0];
+        const track = event.track;
+        const streamKey = `${connectionType}-${senderId}`;
+        console.log(`[WebRTC] Received ${connectionType} track from incoming connection ${senderId}: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}, readyState=${track.readyState}`);
         
-        if (!remoteStream) {
-           const existingUser = useStore.getState().remoteUsers[senderId];
-           remoteStream = (connectionType === 'webcam' ? existingUser?.stream : existingUser?.screenStream) || new MediaStream();
-           remoteStream.addTrack(event.track);
+        // Get or create the accumulated stream for this connection
+        if (!remoteStreamsRef.current[streamKey]) {
+          remoteStreamsRef.current[streamKey] = event.streams[0] || new MediaStream();
         }
+        const accumulatedStream = remoteStreamsRef.current[streamKey];
+        
+        // Add the track if not already present
+        if (!accumulatedStream.getTrackById(track.id)) {
+          accumulatedStream.addTrack(track);
+        }
+        
+        // Create a new MediaStream from all accumulated tracks — forces Zustand to see a new object reference
+        const freshStream = new MediaStream(accumulatedStream.getTracks());
+        console.log(`[WebRTC] Updated ${connectionType} stream for incoming ${senderId}: videoTracks=${freshStream.getVideoTracks().length}, audioTracks=${freshStream.getAudioTracks().length}`);
 
         if (connectionType === 'webcam') {
-          setRemoteStream(senderId, remoteStream);
+          setRemoteStream(senderId, freshStream);
         } else {
-          setRemoteScreenStream(senderId, remoteStream);
+          setRemoteScreenStream(senderId, freshStream);
         }
       };
 
@@ -455,9 +479,11 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         screenTrackListenerRef.current = null;
       }
 
-      // Close all active connections
+      // Close all active connections (also cleans up audio elements)
       Object.keys(webcamConnectionsRef.current).forEach(userId => closeConnection(userId, 'webcam'));
       Object.keys(screenConnectionsRef.current).forEach(userId => closeConnection(userId, 'screen'));
+
+      remoteStreamsRef.current = {};
 
       socketRef.current?.disconnect();
       socketRef.current = null;
@@ -489,19 +515,38 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
   const startScreenShare = useCallback(async () => {
     let screenStream: MediaStream;
     try {
-      // Tier 1: Try standard audio
+      // Tier 1: Try with explicit audio constraints for better cross-browser support
       screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
-        audio: true
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          // @ts-expect-error -- Chrome-specific, allows system audio capture
+          suppressLocalAudioPlayback: false,
+        }
       });
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      console.warn('[WebRTC] Tier 1 standard audio failed. Attempting Tier 2 (video only)...', error);
+      console.warn('[WebRTC] Tier 1 explicit audio failed. Attempting Tier 2 (audio: true)...', error);
       if (error.name === 'NotAllowedError') {
         return;
       }
       
       try {
+        // Tier 2: Try simple audio: true
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
+          audio: true
+        });
+      } catch (err2: unknown) {
+        const error2 = err2 instanceof Error ? err2 : new Error('Unknown error');
+        console.warn('[WebRTC] Tier 2 audio:true failed. Attempting Tier 3 (video only)...', error2);
+        if (error2.name === 'NotAllowedError') {
+          return;
+        }
+
+        try {
           // Tier 3: Fallback to video only
           screenStream = await navigator.mediaDevices.getDisplayMedia({
             video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } },
@@ -513,10 +558,17 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
           return;
         }
       }
+    }
 
     try {
       setLocalScreenStream(screenStream);
       
+      // Log all tracks for debugging
+      console.log(`[WebRTC] Screen share acquired: ${screenStream.getTracks().length} tracks`);
+      screenStream.getTracks().forEach(t => {
+        console.log(`[WebRTC]   Track: kind=${t.kind}, id=${t.id}, label=${t.label}, enabled=${t.enabled}, readyState=${t.readyState}`);
+      });
+
       if (screenStream.getAudioTracks().length === 0) {
         console.warn("[WebRTC] Screen stream was acquired, but it contains NO audio tracks.");
         alert("Warning: Your screen share has NO audio! If you wanted to share audio, you must check the 'Share tab audio' or 'Share system audio' checkbox in the browser's screen share popup menu.");
