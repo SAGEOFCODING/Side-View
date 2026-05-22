@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { VideoPlayer } from './VideoPlayer';
-import { User, MicOff } from 'lucide-react';
+import { User, MicOff, ExternalLink } from 'lucide-react';
 
 interface WebcamOverlayProps {
   stream: MediaStream | null;
@@ -13,24 +13,41 @@ interface WebcamOverlayProps {
   isMicMuted?: boolean;
   isCameraOff?: boolean;
   iceStatus?: string;
+  index?: number;
 }
 
-export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, isLocal, name, isMicMuted, isCameraOff, iceStatus }: WebcamOverlayProps) {
+export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, isLocal, name, isMicMuted, isCameraOff, iceStatus, index = 0 }: WebcamOverlayProps) {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  const handlePiP = (e: React.MouseEvent) => {
+    e.stopPropagation(); // prevent drag
+    if (videoRef.current && document.pictureInPictureEnabled) {
+      if (document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(console.error);
+      } else {
+        videoRef.current.requestPictureInPicture().catch(console.error);
+      }
+    }
+  };
   return (
     <motion.div
       drag
       dragMomentum={false}
-      initial={{ scale: 0, opacity: 0 }}
+      initial={{ y: index * 200, scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 260, damping: 20 }}
-      className="z-50 cursor-move group relative"
+      className="absolute top-4 right-4 z-50 cursor-move group pointer-events-auto"
     >
-      <div className="relative w-24 h-36 md:w-32 md:h-48 rounded-2xl overflow-hidden glass-panel shadow-2xl transition-transform hover:scale-[1.02] active:scale-95">
+      <div 
+        className="relative w-32 h-48 rounded-2xl overflow-hidden glass-panel shadow-2xl transition-shadow resize"
+        style={{ minWidth: '120px', minHeight: '160px', maxWidth: '80vw', maxHeight: '80vh' }}
+      >
         {stream && !isCameraOff ? (
           <VideoPlayer 
+            ref={videoRef}
             stream={stream} 
             muted={isLocal || muted} 
-            className="relative w-full h-full"
+            className="relative w-full h-full pointer-events-none"
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950/80 backdrop-blur-md gap-3 border border-white/5">
@@ -43,6 +60,17 @@ export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, 
         
         {/* Ring overlay */}
         <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
+
+        {/* Hover Controls */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            onClick={handlePiP}
+            title="Picture-in-Picture"
+            className="p-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-md text-white transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Firewall Blocked Overlay */}
         {(iceStatus === 'failed' || iceStatus === 'disconnected') && !isLocal && (

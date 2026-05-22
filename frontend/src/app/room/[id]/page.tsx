@@ -263,7 +263,7 @@ export default function RoomPage() {
       </div>
 
       {/* Floating Webcams Container */}
-      <div className="absolute top-20 right-4 md:right-6 z-40 flex flex-col gap-3 max-h-[70vh] overflow-y-auto hide-scrollbar">
+      <div className="absolute inset-0 z-40 pointer-events-none">
         <WebcamOverlay 
           stream={localUser.stream} 
           isLocal 
@@ -271,8 +271,9 @@ export default function RoomPage() {
           name="You" 
           isMicMuted={localUser.micMuted}
           isCameraOff={localUser.cameraOff}
+          index={0}
         />
-        {Object.entries(remoteUsers).map(([id, user]) => (
+        {Object.entries(remoteUsers).map(([id, user], i) => (
           <WebcamOverlay 
             key={id} 
             stream={user.stream} 
@@ -281,6 +282,7 @@ export default function RoomPage() {
             isMicMuted={user.micMuted}
             isCameraOff={user.cameraOff}
             iceStatus={user.iceStatus}
+            index={i + 1}
           />
         ))}
       </div>

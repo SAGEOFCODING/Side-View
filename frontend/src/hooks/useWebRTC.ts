@@ -479,9 +479,9 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         video: {
           width: { ideal: 1920, max: 1920 },
           height: { ideal: 1080, max: 1080 },
-          frameRate: { ideal: 30, max: 30 }
+          frameRate: { ideal: 30, max: 60 }
         },
-        audio: true,
+        audio: true
       });
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error('Unknown error');

@@ -7,8 +7,13 @@ interface VideoPlayerProps {
   className?: string;
 }
 
-export const VideoPlayer = React.memo(function VideoPlayer({ stream, muted = false, className }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPlayerProps>(function VideoPlayer({ stream, muted = false, className }, forwardedRef) {
+  const internalRef = useRef<HTMLVideoElement>(null);
+
+  // Expose the internal video element to the parent (for PiP)
+  React.useImperativeHandle(forwardedRef, () => internalRef.current as HTMLVideoElement);
+
+  const videoRef = internalRef;
   const [playBlocked, setPlayBlocked] = useState(false);
 
   useEffect(() => {
@@ -78,4 +83,4 @@ export const VideoPlayer = React.memo(function VideoPlayer({ stream, muted = fal
       )}
     </div>
   );
-});
+}));
