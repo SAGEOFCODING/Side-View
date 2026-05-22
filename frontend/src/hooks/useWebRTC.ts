@@ -6,21 +6,50 @@ import { useStore } from '../store/useStore';
 
 const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://sideview-backend-252675432928.us-central1.run.app';
 
+// ICE server configuration — TURN credentials loaded from environment
+function getIceServers() {
+  const servers: RTCIceServer[] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+  ];
+
+  const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
+  const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
+  const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    // Support multiple TURN URLs (comma-separated)
+    const turnUrls = turnUrl.split(',').map(u => u.trim());
+    for (const url of turnUrls) {
+      servers.push({
+        urls: url,
+        username: turnUsername,
+        credential: turnCredential,
+      });
+    }
+  }
+
+  return servers;
+}
+
 export function useWebRTC(roomId: string, shouldConnect: boolean) {
   const socketRef = useRef<Socket | null>(null);
   const peerInstanceRef = useRef<Peer | null>(null);
   const myPeerIdRef = useRef<string | null>(null);
   
-  // We keep track of peer connections to close them if needed
+  // Track peer connections to close them if needed
   const webcamCallsRef = useRef<Record<string, MediaConnection>>({});
   const screenCallsRef = useRef<Record<string, MediaConnection>>({});
   
-  // We need to map Peer IDs to User IDs (socket IDs), and vice versa
+  // Map Peer IDs to User IDs (socket IDs), and vice versa
   const peerToUserMap = useRef<Record<string, string>>({});
   const userToPeerMap = useRef<Record<string, string>>({});
 
   // Track if we've already set up (for React strict mode double-invoke)
   const isSetupRef = useRef(false);
+
+  // Track screen share track listener for cleanup
+  const screenTrackListenerRef = useRef<{ track: MediaStreamTrack; handler: () => void } | null>(null);
 
   const {
     setSocketId,
@@ -29,7 +58,8 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     addRemoteUser,
     removeRemoteUser,
     setRemoteStream,
-    setRemoteScreenStream
+    setRemoteScreenStream,
+    setConnectionStatus,
   } = useStore();
 
   const getMedia = useCallback(async (): Promise<{ stream: MediaStream | null; error: string | null }> => {
@@ -55,9 +85,10 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       
       setLocalStream(stream);
       return { stream, error: null };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error accessing camera/microphone.';
       console.error('Failed to get local stream', err);
-      return { stream: null, error: err.message || 'Unknown error accessing camera/microphone.' };
+      return { stream: null, error: message };
     }
   }, [setLocalStream]);
 
@@ -141,6 +172,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     isSetupRef.current = true;
 
     console.log(`[WebRTC] Setting up for room ${roomId}`);
+    setConnectionStatus('connecting');
 
     // Dynamically import PeerJS so it doesn't break SSR in Next.js
     import('peerjs').then(({ default: PeerConstructor }) => {
@@ -148,29 +180,12 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       const peer = new PeerConstructor({
         host: url.hostname,
         secure: url.protocol === 'https:',
+        // url.port returns "" for default ports (80/443), so fall back correctly
         port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80),
         path: '/peerjs',
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' },
-            {
-              urls: 'turn:watchwithyou.metered.live:80',
-              username: '932c00b398d17a448e4a61e1',
-              credential: 'iY0PjfIIWDy0Ogwg'
-            },
-            {
-              urls: 'turn:watchwithyou.metered.live:443',
-              username: '932c00b398d17a448e4a61e1',
-              credential: 'iY0PjfIIWDy0Ogwg'
-            },
-            {
-              urls: 'turn:watchwithyou.metered.live:443?transport=tcp',
-              username: '932c00b398d17a448e4a61e1',
-              credential: 'iY0PjfIIWDy0Ogwg'
-            }
-          ]
-        }
+          iceServers: getIceServers(),
+        },
       });
       peerInstanceRef.current = peer;
 
@@ -179,18 +194,32 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         console.log(`[WebRTC] PeerJS open with id: ${id}`);
         
         // Now connect to Socket.io for room discovery
-        socketRef.current = io(SOCKET_SERVER_URL);
+        socketRef.current = io(SOCKET_SERVER_URL, {
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          timeout: 10000,
+        });
         
         socketRef.current.on('connect', () => {
           console.log(`[WebRTC] Socket connected: ${socketRef.current!.id}`);
           setSocketId(socketRef.current!.id as string);
+          setConnectionStatus('connected');
           // Join room and announce our Peer ID
           socketRef.current?.emit('join_room', { roomId, peerId: id });
         });
 
         socketRef.current.on('room_full', (data: { message: string }) => {
+          setConnectionStatus('error');
           alert(data.message);
           window.location.href = '/';
+        });
+
+        socketRef.current.on('error_message', (data: { message: string }) => {
+          console.error('[WebRTC] Server error:', data.message);
+        });
+
+        socketRef.current.on('server_shutdown', () => {
+          setConnectionStatus('reconnecting');
         });
 
         // Handle list of users already in the room when we join
@@ -198,7 +227,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
           console.log(`[WebRTC] Received existing users:`, users);
           for (const user of users) {
             if (user.peerId) {
-              setupRemoteUser(user.userId, user.peerId, true); // Newcomer calls existing users
+              setupRemoteUser(user.userId, user.peerId, true);
             }
           }
         });
@@ -206,7 +235,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         // Handle a new user joining after us
         socketRef.current.on('user_joined', ({ userId, peerId }: { userId: string; peerId: string }) => {
           console.log(`[WebRTC] User joined: ${userId} (peer: ${peerId})`);
-          setupRemoteUser(userId, peerId, false); // Existing users DO NOT call newcomer, preventing race condition
+          setupRemoteUser(userId, peerId, false);
         });
 
         socketRef.current.on('user_left', (userId: string) => {
@@ -233,12 +262,23 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
           setRemoteScreenStream(userId, null);
         });
 
-        socketRef.current.on('disconnect', () => {
-          console.log('[WebRTC] Socket disconnected');
+        socketRef.current.on('disconnect', (reason) => {
+          console.log('[WebRTC] Socket disconnected:', reason);
+          if (reason !== 'io client disconnect') {
+            setConnectionStatus('reconnecting');
+          }
         });
 
         socketRef.current.on('connect_error', (err) => {
           console.error('[WebRTC] Socket connection error:', err);
+          setConnectionStatus('error');
+        });
+
+        socketRef.current.on('reconnect', () => {
+          console.log('[WebRTC] Socket reconnected');
+          setConnectionStatus('connected');
+          // Re-join room after reconnection
+          socketRef.current?.emit('join_room', { roomId, peerId: myPeerIdRef.current });
         });
       });
 
@@ -285,6 +325,13 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       console.log('[WebRTC] Cleaning up...');
       isSetupRef.current = false;
 
+      // Clean up screen track listener if present
+      if (screenTrackListenerRef.current) {
+        const { track, handler } = screenTrackListenerRef.current;
+        track.removeEventListener('ended', handler);
+        screenTrackListenerRef.current = null;
+      }
+
       // Close all active calls
       Object.values(webcamCallsRef.current).forEach(call => call.close());
       Object.values(screenCallsRef.current).forEach(call => call.close());
@@ -307,7 +354,31 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, shouldConnect]);
 
-  const startScreenShare = async () => {
+  const stopScreenShare = useCallback((stream: MediaStream) => {
+    // Clean up the track ended listener first
+    if (screenTrackListenerRef.current) {
+      const { track, handler } = screenTrackListenerRef.current;
+      track.removeEventListener('ended', handler);
+      screenTrackListenerRef.current = null;
+    }
+
+    stream.getTracks().forEach(track => track.stop());
+    setLocalScreenStream(null);
+    
+    // Close all screen share calls
+    Object.values(screenCallsRef.current).forEach(call => {
+       call.close();
+    });
+    screenCallsRef.current = {};
+
+    // Notify remote users via socket that we stopped screen sharing
+    const state = useStore.getState();
+    if (socketRef.current && state.roomId) {
+      socketRef.current.emit('screen_share_stopped', { roomId: state.roomId });
+    }
+  }, [setLocalScreenStream]);
+
+  const startScreenShare = useCallback(async () => {
     let screenStream: MediaStream;
     try {
       screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -316,17 +387,17 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
           height: { ideal: 1080, max: 1080 },
           frameRate: { ideal: 30, max: 30 }
         },
-        audio: true, // Request system audio
+        audio: true,
       });
-    } catch (err: any) {
-      console.warn('[WebRTC] Screen share with audio failed, attempting fallback...', err);
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      console.warn('[WebRTC] Screen share with audio failed, attempting fallback...', error);
       // If the user explicitly denied permission, don't retry
-      if (err.name === 'NotAllowedError') {
+      if (error.name === 'NotAllowedError') {
         return;
       }
       
       try {
-        alert("Notice: Your browser does not support system audio sharing. Sharing screen video only.");
         screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             width: { ideal: 1920, max: 1920 },
@@ -353,27 +424,13 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       const videoTrack = screenStream.getVideoTracks()[0];
       const handleTrackEnd = () => stopScreenShare(screenStream);
       videoTrack.addEventListener('ended', handleTrackEnd);
+      
+      // Store the listener reference for cleanup
+      screenTrackListenerRef.current = { track: videoTrack, handler: handleTrackEnd };
     } catch (err) {
       console.error('Error sharing screen', err);
     }
-  };
-
-  const stopScreenShare = useCallback((stream: MediaStream) => {
-    stream.getTracks().forEach(track => track.stop());
-    setLocalScreenStream(null);
-    
-    // Close all screen share calls
-    Object.values(screenCallsRef.current).forEach(call => {
-       call.close();
-    });
-    screenCallsRef.current = {};
-
-    // Notify remote users via socket that we stopped screen sharing
-    const state = useStore.getState();
-    if (socketRef.current && state.roomId) {
-      socketRef.current.emit('screen_share_stopped', { roomId: state.roomId });
-    }
-  }, [setLocalScreenStream]);
+  }, [callPeer, setLocalScreenStream, stopScreenShare]);
 
   return { startScreenShare, stopScreenShare, getMedia };
 }

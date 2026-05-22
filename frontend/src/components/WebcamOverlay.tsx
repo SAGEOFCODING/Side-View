@@ -1,17 +1,19 @@
 "use client";
 
+import React from 'react';
 import { motion } from 'framer-motion';
 import { VideoPlayer } from './VideoPlayer';
-import { User } from 'lucide-react';
+import { User, MicOff } from 'lucide-react';
 
 interface WebcamOverlayProps {
   stream: MediaStream | null;
   muted?: boolean;
   isLocal?: boolean;
   name: string;
+  isMicMuted?: boolean;
 }
 
-export function WebcamOverlay({ stream, muted, isLocal, name }: WebcamOverlayProps) {
+export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, isLocal, name, isMicMuted }: WebcamOverlayProps) {
   return (
     <motion.div
       drag
@@ -26,21 +28,30 @@ export function WebcamOverlay({ stream, muted, isLocal, name }: WebcamOverlayPro
           <VideoPlayer 
             stream={stream} 
             muted={isLocal || muted} 
-            className="w-full h-full object-cover"
+            className="relative w-full h-full"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900 gap-2">
             <User className="w-10 h-10 text-zinc-600" />
+            <span className="text-[10px] text-zinc-600 font-medium">Camera Off</span>
           </div>
         )}
         
-        {/* Overlays */}
+        {/* Ring overlay */}
         <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
         
-        <div className="absolute bottom-3 left-3 px-2 py-1 bg-black/60 backdrop-blur-md rounded-md text-xs font-medium text-white flex items-center gap-2">
-          {isLocal ? "You" : name}
+        {/* Name badge + mic indicator */}
+        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+          <div className="px-2 py-1 bg-black/60 backdrop-blur-md rounded-md text-xs font-medium text-white truncate">
+            {isLocal ? "You" : name}
+          </div>
+          {isMicMuted && (
+            <div className="w-6 h-6 bg-red-500/80 backdrop-blur-md rounded-full flex items-center justify-center">
+              <MicOff className="w-3 h-3 text-white" />
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
   );
-}
+});

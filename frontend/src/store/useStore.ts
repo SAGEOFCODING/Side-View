@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+
 interface UserState {
   id: string;
   isHost: boolean;
@@ -12,11 +14,13 @@ interface UserState {
 interface RoomState {
   roomId: string | null;
   socketId: string | null;
+  connectionStatus: ConnectionStatus;
   localUser: UserState;
   remoteUsers: Record<string, UserState>;
   isTheaterMode: boolean;
   setRoomId: (id: string) => void;
   setSocketId: (id: string) => void;
+  setConnectionStatus: (status: ConnectionStatus) => void;
   setLocalStream: (stream: MediaStream | null) => void;
   setLocalScreenStream: (stream: MediaStream | null) => void;
   setLocalUserFlags: (flags: Partial<UserState>) => void;
@@ -28,22 +32,26 @@ interface RoomState {
   resetStore: () => void;
 }
 
+const initialLocalUser: UserState = {
+  id: 'local',
+  isHost: false,
+  stream: null,
+  screenStream: null,
+  micMuted: false,
+  cameraOff: false,
+};
+
 export const useStore = create<RoomState>((set) => ({
   roomId: null,
   socketId: null,
-  localUser: {
-    id: 'local',
-    isHost: false, // first person to join can be host
-    stream: null,
-    screenStream: null,
-    micMuted: false,
-    cameraOff: false,
-  },
+  connectionStatus: 'idle',
+  localUser: { ...initialLocalUser },
   remoteUsers: {},
   isTheaterMode: false,
 
   setRoomId: (id) => set({ roomId: id }),
   setSocketId: (id) => set({ socketId: id }),
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
   setLocalStream: (stream) => 
     set((state) => ({ localUser: { ...state.localUser, stream } })),
   setLocalScreenStream: (stream) => 
@@ -87,14 +95,8 @@ export const useStore = create<RoomState>((set) => ({
   resetStore: () => set({
     roomId: null,
     socketId: null,
-    localUser: {
-      id: 'local',
-      isHost: false,
-      stream: null,
-      screenStream: null,
-      micMuted: false,
-      cameraOff: false,
-    },
+    connectionStatus: 'idle',
+    localUser: { ...initialLocalUser },
     remoteUsers: {},
     isTheaterMode: false,
   }),

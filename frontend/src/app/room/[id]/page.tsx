@@ -1,28 +1,65 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { useParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useStore } from "@/store/useStore";
 import { WebcamOverlay } from "@/components/WebcamOverlay";
 import { VideoPlayer } from "@/components/VideoPlayer";
-import { Mic, MicOff, Video, VideoOff, MonitorUp, StopCircle, Link, Check, LogIn } from "lucide-react";
+import { 
+  Mic, MicOff, Video, VideoOff, MonitorUp, StopCircle, 
+  Link, Check, LogIn, LogOut, Users, Wifi, WifiOff, Loader2 
+} from "lucide-react";
+
+// Connection status indicator — extracted to module level for React Compiler
+type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+
+const STATUS_CONFIG = {
+  idle: { color: 'bg-zinc-500', text: 'Idle', Icon: WifiOff },
+  connecting: { color: 'bg-yellow-500 status-pulse', text: 'Connecting...', Icon: Loader2 },
+  connected: { color: 'bg-emerald-500', text: 'Connected', Icon: Wifi },
+  reconnecting: { color: 'bg-yellow-500 status-pulse', text: 'Reconnecting...', Icon: Loader2 },
+  error: { color: 'bg-red-500', text: 'Connection Error', Icon: WifiOff },
+} as const;
+
+function ConnectionBadge({ status }: { status: ConnectionStatus }) {
+  const config = STATUS_CONFIG[status];
+  const Icon = config.Icon;
+  
+  return (
+    <div className="flex items-center gap-2 text-xs text-zinc-400">
+      <div className={`w-2 h-2 rounded-full ${config.color}`} />
+      <Icon className="w-3 h-3" />
+      <span>{config.text}</span>
+    </div>
+  );
+}
 
 export default function RoomPage() {
   const params = useParams();
+  const router = useRouter();
   const roomId = params.id as string;
   
   const [hasJoined, setHasJoined] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const { startScreenShare, stopScreenShare, getMedia } = useWebRTC(roomId, hasJoined);
-  const { localUser, remoteUsers, setRoomId, resetStore } = useStore();
+  const { localUser, remoteUsers, connectionStatus, setRoomId, resetStore } = useStore();
   
+  const [micMuted, setMicMuted] = useState(false);
+  const [videoOff, setVideoOff] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+
+  // Set room ID on mount
+  useEffect(() => {
+    setRoomId(roomId);
+  }, [roomId, setRoomId]);
+
   // Hardware and State Cleanup on Unmount
   useEffect(() => {
     return () => {
-      // 1. Stop all hardware tracks safely
       const state = useStore.getState();
       if (state.localUser.stream) {
         state.localUser.stream.getTracks().forEach(track => track.stop());
@@ -30,39 +67,19 @@ export default function RoomPage() {
       if (state.localUser.screenStream) {
         state.localUser.screenStream.getTracks().forEach(track => track.stop());
       }
-      
-      // 2. Wipe the global store to prevent state bleeding into the next room
       state.resetStore();
     };
   }, []);
-  
-  const [micMuted, setMicMuted] = useState(false);
-  const [videoOff, setVideoOff] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
 
-  useEffect(() => {
-    setRoomId(roomId);
-  }, [roomId, setRoomId]);
-
-  const handleJoin = async () => {
-    setIsStarting(true);
-    setPermissionError(null);
-    try {
-      const { stream, error } = await getMedia();
-      if (!stream) {
-        setPermissionError(`Camera access denied/unavailable: ${error}. Joining without camera.`);
-        // We do NOT return here, allowing them to join the room anyway!
-      }
-      setHasJoined(true);
-    } catch (err: any) {
-      console.error(err);
-      setPermissionError(`An error occurred: ${err.message || 'Unknown error'}`);
-      // Fallback: still let them in even if it completely crashed
-      setHasJoined(true);
-    } finally {
-      setIsStarting(false);
+  const handleLeaveRoom = () => {
+    if (localUser.stream) {
+      localUser.stream.getTracks().forEach(track => track.stop());
     }
+    if (localUser.screenStream) {
+      localUser.screenStream.getTracks().forEach(track => track.stop());
+    }
+    resetStore();
+    router.push('/');
   };
 
   const toggleMic = () => {
@@ -85,17 +102,61 @@ export default function RoomPage() {
     }
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!hasJoined) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      switch (e.key.toLowerCase()) {
+        case 'm':
+          toggleMic();
+          break;
+        case 'v':
+          toggleVideo();
+          break;
+        case 'escape':
+          handleLeaveRoom();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  const handleJoin = async () => {
+    setIsStarting(true);
+    setPermissionError(null);
+    try {
+      const { stream, error } = await getMedia();
+      if (!stream) {
+        setPermissionError(`Camera access denied/unavailable: ${error}. Joining without camera.`);
+      }
+      setHasJoined(true);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error(err);
+      setPermissionError(`An error occurred: ${message}`);
+      setHasJoined(true);
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const participantCount = 1 + Object.keys(remoteUsers).length;
+
   // Pre-join screen
   if (!hasJoined) {
     return (
       <main className="flex flex-col items-center justify-center min-h-screen bg-[#050505] p-6 relative overflow-hidden">
-        {/* Background gradient effects */}
         <div className="absolute top-1/4 -left-1/4 w-[50vw] h-[50vw] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-1/4 -right-1/4 w-[50vw] h-[50vw] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
         
@@ -110,19 +171,27 @@ export default function RoomPage() {
           <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Ready to join?</h1>
           <p className="text-gray-400 mb-8 font-medium">Room ID: {roomId}</p>
           
-          {permissionError && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6 text-red-400 text-sm font-medium">
-              {permissionError}
-            </div>
-          )}
+          <AnimatePresence>
+            {permissionError && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6 text-red-400 text-sm font-medium"
+              >
+                {permissionError}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <button
+            id="join-room-btn"
             onClick={handleJoin}
             disabled={isStarting}
-            className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-lg flex items-center justify-center gap-3 hover:bg-gray-100 transition-all active:scale-[0.98] disabled:opacity-50"
+            className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-lg flex items-center justify-center gap-3 hover:bg-gray-100 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isStarting ? (
-              <div className="w-6 h-6 border-3 border-black/20 border-t-black rounded-full animate-spin" />
+              <Loader2 className="w-6 h-6 animate-spin" />
             ) : (
               <>
                 <LogIn className="w-6 h-6" />
@@ -147,20 +216,37 @@ export default function RoomPage() {
         <div className="absolute bottom-1/4 right-1/4 w-[40vw] h-[40vw] bg-blue-600/10 rounded-full blur-[120px]" />
       </div>
 
+      {/* Top Status Bar */}
+      <div className="relative z-30 p-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-3 border border-white/10">
+            <Users className="w-4 h-4 text-purple-400" />
+            <span className="text-sm font-medium text-zinc-300">{participantCount}</span>
+          </div>
+          <ConnectionBadge status={connectionStatus} />
+        </div>
+        <div className="glass-panel px-4 py-2 rounded-full border border-white/10">
+          <span className="text-xs text-zinc-500 font-mono">Room: {roomId}</span>
+        </div>
+      </div>
+
       {/* Main Content Area */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 md:p-8 min-h-0">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 md:px-8 min-h-0">
         {activeScreenShare ? (
-          <div className="w-full max-w-6xl w-full aspect-video rounded-3xl overflow-hidden glass-panel shadow-2xl relative border border-white/5 bg-black/40">
+          <div className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden glass-panel shadow-2xl relative border border-white/5 bg-black/40">
             <VideoPlayer 
               stream={activeScreenShare} 
               muted={!!localUser.screenStream}
-              className="w-full h-full object-contain"
+              className="relative w-full h-full"
             />
-            {/* Elegant overlay gradient */}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/20 pointer-events-none" />
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center text-center"
+          >
             <div className="w-24 h-24 bg-white/5 rounded-3xl flex items-center justify-center mb-6 border border-white/10 shadow-xl">
               <MonitorUp className="w-10 h-10 text-white/40" />
             </div>
@@ -168,13 +254,28 @@ export default function RoomPage() {
             <p className="text-gray-400 max-w-md mx-auto text-lg">
               Waiting for someone to start a screen share. When they do, it will appear right here in cinematic mode.
             </p>
-          </div>
+            <div className="mt-6 flex items-center gap-2 text-zinc-600 text-sm">
+              <span className="hidden md:inline">Press</span>
+              <kbd className="hidden md:inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono border border-zinc-700">M</kbd>
+              <span className="hidden md:inline">to mute ·</span>
+              <kbd className="hidden md:inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono border border-zinc-700">V</kbd>
+              <span className="hidden md:inline">for video ·</span>
+              <kbd className="hidden md:inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono border border-zinc-700">Esc</kbd>
+              <span className="hidden md:inline">to leave</span>
+            </div>
+          </motion.div>
         )}
       </div>
 
-      {/* Floating Webcams Container - Absolute positioned to avoid pushing UI */}
-      <div className="absolute top-6 right-6 z-40 flex flex-col gap-4 max-h-[80vh] overflow-y-auto hide-scrollbar">
-        <WebcamOverlay stream={localUser.stream} isLocal muted name="You" />
+      {/* Floating Webcams Container */}
+      <div className="absolute top-20 right-4 md:right-6 z-40 flex flex-col gap-3 max-h-[70vh] overflow-y-auto hide-scrollbar">
+        <WebcamOverlay 
+          stream={localUser.stream} 
+          isLocal 
+          muted 
+          name="You" 
+          isMicMuted={micMuted}
+        />
         {Object.entries(remoteUsers).map(([id, user]) => (
           <WebcamOverlay 
             key={id} 
@@ -186,58 +287,76 @@ export default function RoomPage() {
       </div>
 
       {/* Bottom Control Bar */}
-      <div className="relative z-30 p-6 flex justify-center">
-        <div className="glass-panel px-8 py-4 rounded-full flex items-center gap-6 shadow-2xl border border-white/10 bg-black/40 backdrop-blur-xl">
+      <div className="relative z-30 p-4 md:p-6 flex justify-center">
+        <div className="glass-panel px-4 md:px-8 py-3 md:py-4 rounded-full flex items-center gap-3 md:gap-6 shadow-2xl border border-white/10 bg-black/40 backdrop-blur-xl">
           <button 
+            id="toggle-mic-btn"
             onClick={toggleMic}
-            className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
+            title={micMuted ? "Unmute microphone (M)" : "Mute microphone (M)"}
+            className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${
               micMuted 
                 ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' 
                 : 'bg-white/10 text-white hover:bg-white/20'
             }`}
           >
-            {micMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+            {micMuted ? <MicOff className="w-5 h-5 md:w-6 md:h-6" /> : <Mic className="w-5 h-5 md:w-6 md:h-6" />}
           </button>
           
           <button 
+            id="toggle-video-btn"
             onClick={toggleVideo}
-            className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
+            title={videoOff ? "Turn on camera (V)" : "Turn off camera (V)"}
+            className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${
               videoOff 
                 ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' 
                 : 'bg-white/10 text-white hover:bg-white/20'
             }`}
           >
-            {videoOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
+            {videoOff ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
           </button>
 
-          <div className="w-px h-8 bg-white/10 mx-2" />
+          <div className="w-px h-8 bg-white/10" />
 
           {localUser.screenStream ? (
             <button 
+              id="stop-share-btn"
               onClick={() => stopScreenShare(localUser.screenStream!)}
-              className="px-6 h-14 rounded-full bg-red-500 text-white font-medium flex items-center gap-2 hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+              className="px-4 md:px-6 h-12 md:h-14 rounded-full bg-red-500 text-white font-medium flex items-center gap-2 hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20 text-sm md:text-base"
             >
-              <StopCircle className="w-5 h-5" />
-              Stop Sharing
+              <StopCircle className="w-4 h-4 md:w-5 md:h-5" />
+              <span className="hidden sm:inline">Stop Sharing</span>
+              <span className="sm:hidden">Stop</span>
             </button>
           ) : (
             <button 
+              id="share-screen-btn"
               onClick={startScreenShare}
-              className="px-6 h-14 rounded-full bg-white text-black font-medium flex items-center gap-2 hover:bg-gray-100 transition-colors shadow-lg shadow-white/10"
+              className="px-4 md:px-6 h-12 md:h-14 rounded-full bg-white text-black font-medium flex items-center gap-2 hover:bg-gray-100 transition-colors shadow-lg shadow-white/10 text-sm md:text-base"
             >
-              <MonitorUp className="w-5 h-5" />
-              Share Screen
+              <MonitorUp className="w-4 h-4 md:w-5 md:h-5" />
+              <span className="hidden sm:inline">Share Screen</span>
+              <span className="sm:hidden">Share</span>
             </button>
           )}
 
-          <div className="w-px h-8 bg-white/10 mx-2" />
+          <div className="w-px h-8 bg-white/10" />
 
           <button 
+            id="copy-link-btn"
             onClick={copyLink}
-            className="w-14 h-14 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all"
+            className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all"
             title="Copy room link"
           >
-            {copied ? <Check className="w-6 h-6 text-green-400" /> : <Link className="w-5 h-5" />}
+            {copied ? <Check className="w-5 h-5 md:w-6 md:h-6 text-green-400" /> : <Link className="w-4 h-4 md:w-5 md:h-5" />}
+          </button>
+
+          <button 
+            id="leave-room-btn"
+            onClick={handleLeaveRoom}
+            className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20 transition-all"
+            title="Leave room (Esc)"
+          >
+            <LogOut className="w-5 h-5 md:w-6 md:h-6" />
           </button>
         </div>
       </div>

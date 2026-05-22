@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
 
-interface VideoPlayerProps extends React.VideoHTMLAttributes<HTMLVideoElement> {
+interface VideoPlayerProps {
   stream: MediaStream | null;
   muted?: boolean;
+  className?: string;
 }
 
-export function VideoPlayer({ stream, muted = false, ...props }: VideoPlayerProps) {
+export const VideoPlayer = React.memo(function VideoPlayer({ stream, muted = false, className }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playBlocked, setPlayBlocked] = useState(false);
 
@@ -57,14 +58,13 @@ export function VideoPlayer({ stream, muted = false, ...props }: VideoPlayerProp
   };
 
   return (
-    <div className={`relative ${props.className || ''}`}>
+    <div className={className || ''}>
       <video
         ref={videoRef}
         muted={muted}
         autoPlay
         playsInline
         className="w-full h-full object-cover"
-        {...props}
       />
       {playBlocked && (
         <div 
@@ -78,4 +78,4 @@ export function VideoPlayer({ stream, muted = false, ...props }: VideoPlayerProp
       )}
     </div>
   );
-}
+});
