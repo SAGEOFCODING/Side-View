@@ -291,7 +291,6 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
     // Connect to Socket.io for signaling
     socketRef.current = io(SOCKET_SERVER_URL, {
-      transports: ['websocket'],
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
