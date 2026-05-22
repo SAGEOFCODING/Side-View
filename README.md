@@ -15,7 +15,7 @@ SideView is a peer-to-peer (P2P) WebRTC video conferencing application built wit
 - **Backend**: Express.js, Socket.io (for room discovery/signaling), PeerJS Server (for WebRTC handshake brokering).
 - **Deployment**:
   - Frontend hosted on Vercel.
-  - Backend hosted on Google Cloud Run (locked to `--max-instances=1` to preserve in-memory room states).
+  - Backend hosted on Render.
 
 ## Local Development
 
