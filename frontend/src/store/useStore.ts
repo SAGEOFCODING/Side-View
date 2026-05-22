@@ -24,10 +24,11 @@ interface RoomState {
   setLocalStream: (stream: MediaStream | null) => void;
   setLocalScreenStream: (stream: MediaStream | null) => void;
   setLocalUserFlags: (flags: Partial<UserState>) => void;
-  addRemoteUser: (id: string) => void;
+  addRemoteUser: (id: string, flags?: Partial<UserState>) => void;
   removeRemoteUser: (id: string) => void;
   setRemoteStream: (id: string, stream: MediaStream | null) => void;
   setRemoteScreenStream: (id: string, stream: MediaStream | null) => void;
+  setRemoteUserFlags: (id: string, flags: Partial<UserState>) => void;
   toggleTheaterMode: () => void;
   resetStore: () => void;
 }
@@ -59,12 +60,22 @@ export const useStore = create<RoomState>((set) => ({
   setLocalUserFlags: (flags) =>
     set((state) => ({ localUser: { ...state.localUser, ...flags } })),
     
-  addRemoteUser: (id) => set((state) => {
-    if (state.remoteUsers[id]) return state;
+  addRemoteUser: (id, flags) => set((state) => {
+    if (state.remoteUsers[id]) {
+      if (flags) {
+        return {
+          remoteUsers: {
+            ...state.remoteUsers,
+            [id]: { ...state.remoteUsers[id], ...flags }
+          }
+        };
+      }
+      return state;
+    }
     return {
       remoteUsers: {
         ...state.remoteUsers,
-        [id]: { id, isHost: false, stream: null, screenStream: null, micMuted: false, cameraOff: false }
+        [id]: { id, isHost: false, stream: null, screenStream: null, micMuted: false, cameraOff: false, ...flags }
       }
     };
   }),
@@ -88,6 +99,15 @@ export const useStore = create<RoomState>((set) => ({
       remoteUsers: {
         ...state.remoteUsers,
         [id]: { ...state.remoteUsers[id], screenStream: stream }
+      }
+    };
+  }),
+  setRemoteUserFlags: (id, flags) => set((state) => {
+    if (!state.remoteUsers[id]) return state;
+    return {
+      remoteUsers: {
+        ...state.remoteUsers,
+        [id]: { ...state.remoteUsers[id], ...flags }
       }
     };
   }),

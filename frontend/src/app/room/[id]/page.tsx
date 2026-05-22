@@ -44,11 +44,9 @@ export default function RoomPage() {
   const [hasJoined, setHasJoined] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
-  const { startScreenShare, stopScreenShare, getMedia } = useWebRTC(roomId, hasJoined);
+  const { startScreenShare, stopScreenShare, getMedia, toggleMic, toggleVideo } = useWebRTC(roomId, hasJoined);
   const { localUser, remoteUsers, connectionStatus, setRoomId, resetStore } = useStore();
   
-  const [micMuted, setMicMuted] = useState(false);
-  const [videoOff, setVideoOff] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -82,25 +80,7 @@ export default function RoomPage() {
     router.push('/');
   };
 
-  const toggleMic = () => {
-    if (localUser.stream) {
-      const audioTrack = localUser.stream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setMicMuted(!audioTrack.enabled);
-      }
-    }
-  };
 
-  const toggleVideo = () => {
-    if (localUser.stream) {
-      const videoTrack = localUser.stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setVideoOff(!videoTrack.enabled);
-      }
-    }
-  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -274,7 +254,8 @@ export default function RoomPage() {
           isLocal 
           muted 
           name="You" 
-          isMicMuted={micMuted}
+          isMicMuted={localUser.micMuted}
+          isCameraOff={localUser.cameraOff}
         />
         {Object.entries(remoteUsers).map(([id, user]) => (
           <WebcamOverlay 
@@ -282,6 +263,8 @@ export default function RoomPage() {
             stream={user.stream} 
             muted={false}
             name={`Guest ${id.substring(0,4)}`}
+            isMicMuted={user.micMuted}
+            isCameraOff={user.cameraOff}
           />
         ))}
       </div>
@@ -292,27 +275,27 @@ export default function RoomPage() {
           <button 
             id="toggle-mic-btn"
             onClick={toggleMic}
-            title={micMuted ? "Unmute microphone (M)" : "Mute microphone (M)"}
+            title={localUser.micMuted ? "Unmute microphone (M)" : "Mute microphone (M)"}
             className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${
-              micMuted 
+              localUser.micMuted 
                 ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' 
                 : 'bg-white/10 text-white hover:bg-white/20'
             }`}
           >
-            {micMuted ? <MicOff className="w-5 h-5 md:w-6 md:h-6" /> : <Mic className="w-5 h-5 md:w-6 md:h-6" />}
+            {localUser.micMuted ? <MicOff className="w-5 h-5 md:w-6 md:h-6" /> : <Mic className="w-5 h-5 md:w-6 md:h-6" />}
           </button>
           
           <button 
             id="toggle-video-btn"
             onClick={toggleVideo}
-            title={videoOff ? "Turn on camera (V)" : "Turn off camera (V)"}
+            title={localUser.cameraOff ? "Turn on camera (V)" : "Turn off camera (V)"}
             className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${
-              videoOff 
+              localUser.cameraOff 
                 ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' 
                 : 'bg-white/10 text-white hover:bg-white/20'
             }`}
           >
-            {videoOff ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
+            {localUser.cameraOff ? <VideoOff className="w-5 h-5 md:w-6 md:h-6" /> : <Video className="w-5 h-5 md:w-6 md:h-6" />}
           </button>
 
           <div className="w-px h-8 bg-white/10" />

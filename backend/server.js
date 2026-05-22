@@ -52,6 +52,7 @@ app.use(cors({
     if (ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
       return callback(null, true);
     }
+    log('warn', 'Express CORS blocked origin', { origin, allowedOrigins: ALLOWED_ORIGINS });
     return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST'],
@@ -108,6 +109,7 @@ const io = new Server(server, {
       if (ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
         return callback(null, true);
       }
+      log('warn', 'Socket.io CORS blocked origin', { origin, allowedOrigins: ALLOWED_ORIGINS });
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST'],
@@ -187,14 +189,20 @@ io.on('connection', (socket) => {
     const existingUsers = rooms[roomId].users.map(u => ({
       userId: u.socketId,
       peerId: u.peerId,
+      micMuted: u.micMuted || false,
+      cameraOff: u.cameraOff || false,
     }));
     socket.emit('existing_users', existingUsers);
 
+    // Get initial states if provided
+    const micMuted = typeof data === 'object' ? !!data?.micMuted : false;
+    const cameraOff = typeof data === 'object' ? !!data?.cameraOff : false;
+
     // Add the new user to the room
-    rooms[roomId].users.push({ socketId: socket.id, peerId });
+    rooms[roomId].users.push({ socketId: socket.id, peerId, micMuted, cameraOff });
     
     // Notify others in the room that a new user joined
-    socket.to(roomId).emit('user_joined', { userId: socket.id, peerId });
+    socket.to(roomId).emit('user_joined', { userId: socket.id, peerId, micMuted, cameraOff });
     log('info', 'User joined room', {
       socketId: socket.id,
       peerId,
@@ -206,6 +214,35 @@ io.on('connection', (socket) => {
   socket.on('peer_id', (data) => {
     if (!data || !isValidRoomId(data.roomId)) return;
     socket.to(data.roomId).emit('peer_id', { userId: socket.id, peerId: data.peerId });
+  });
+
+  socket.on('signal', (data) => {
+    if (data && data.targetId) {
+      io.to(data.targetId).emit('signal', {
+        senderId: socket.id,
+        signal: data.signal,
+      });
+    }
+  });
+
+  socket.on('user_state_changed', (data) => {
+    const roomId = data?.roomId;
+    if (roomId && isValidRoomId(roomId)) {
+      const room = rooms[roomId];
+      if (room) {
+        const user = room.users.find(u => u.socketId === socket.id);
+        if (user) {
+          user.micMuted = !!data.micMuted;
+          user.cameraOff = !!data.cameraOff;
+        }
+      }
+      socket.to(roomId).emit('user_state_changed', {
+        userId: socket.id,
+        micMuted: !!data.micMuted,
+        cameraOff: !!data.cameraOff,
+      });
+      log('info', 'User state changed', { socketId: socket.id, roomId, micMuted: !!data.micMuted, cameraOff: !!data.cameraOff });
+    }
   });
 
   socket.on('screen_share_stopped', (data) => {

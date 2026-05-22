@@ -24,7 +24,7 @@ async function runTest() {
       }
     });
 
-    await page1.goto('https://sideview-frontend-252675432928.us-central1.run.app');
+    await page1.goto('http://localhost:3000');
     
     // Click 'Create Private Room'
     console.log('Clicking Create Private Room...');

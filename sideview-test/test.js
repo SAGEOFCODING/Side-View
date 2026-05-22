@@ -20,7 +20,9 @@ async function runTest() {
   try {
     console.log('[Test] Launching Client 1');
     const page1 = await browser1.newPage();
-    await page1.goto(roomUrl, { waitUntil: 'networkidle2' });
+    page1.on('console', msg => console.log('PAGE 1 LOG:', msg.text()));
+    page1.on('pageerror', err => console.log('PAGE 1 ERROR:', err.toString()));
+    await page1.goto(roomUrl, { waitUntil: 'domcontentloaded' });
     
     // Click Join Room button
     await page1.waitForSelector('button');
@@ -36,7 +38,9 @@ async function runTest() {
 
     console.log('[Test] Launching Client 2');
     const page2 = await browser2.newPage();
-    await page2.goto(roomUrl, { waitUntil: 'networkidle2' });
+    page2.on('console', msg => console.log('PAGE 2 LOG:', msg.text()));
+    page2.on('pageerror', err => console.log('PAGE 2 ERROR:', err.toString()));
+    await page2.goto(roomUrl, { waitUntil: 'domcontentloaded' });
     
     // Click Join Room button for Client 2
     await page2.waitForSelector('button');
