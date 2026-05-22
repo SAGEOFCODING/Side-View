@@ -440,7 +440,8 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         roomId, 
         peerId: socketRef.current!.id,
         micMuted: localUser.micMuted,
-        cameraOff: localUser.cameraOff
+        cameraOff: localUser.cameraOff,
+        name: localUser.name
       });
     });
 

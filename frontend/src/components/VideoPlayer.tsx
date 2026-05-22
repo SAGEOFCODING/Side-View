@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -17,96 +17,116 @@ export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPl
   const videoRef = internalRef;
   const [playBlocked, setPlayBlocked] = useState(false);
 
+  // Master function to attempt playing both elements
+  const attemptPlay = useCallback(() => {
+    const video = videoRef.current;
+    const audio = audioRef.current;
+
+    if (video && video.srcObject) {
+      video.play().catch(e => {
+        if (e.name === 'NotAllowedError') setPlayBlocked(true);
+      });
+    }
+
+    if (audio && audio.srcObject && !muted) {
+      // Force unmute imperatively right before playing
+      audio.muted = false;
+      audio.volume = 1.0;
+      audio.play().catch(e => {
+        if (e.name === 'NotAllowedError') setPlayBlocked(true);
+      });
+    }
+  }, [muted]);
+
+  // Assign stream to both elements
   useEffect(() => {
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video || !audio) return;
 
     if (stream) {
-      // Only reassign srcObject if the stream actually changed
       if (video.srcObject !== stream) video.srcObject = stream;
       if (audio.srcObject !== stream) audio.srcObject = stream;
       
-      const playPromise = video.play();
-      const audioPlayPromise = audio.play();
+      // Imperatively set the audio muted state BEFORE playing.
+      // React's muted JSX attribute is unreliable for <audio> and <video>.
+      audio.muted = muted;
+      if (!muted) audio.volume = 1.0;
 
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          setPlayBlocked(false);
-        }).catch(e => {
-          if (e.name === 'NotAllowedError') {
-            setPlayBlocked(true);
-          } else if (e.name !== 'AbortError') {
-            console.error('Auto-play failed:', e);
-          }
-        });
-      }
+      attemptPlay();
 
-      // Audio might fail independently due to Auto-Play policy! We MUST block the UI so the user can click to play.
-      if (audioPlayPromise !== undefined) {
-        audioPlayPromise.catch(e => {
-           if (e.name === 'NotAllowedError') {
-             setPlayBlocked(true);
-           } else if (e.name !== 'AbortError') {
-             console.error('Audio auto-play failed:', e);
-           }
-        });
-      }
+      // Also listen for new tracks being added to the stream (e.g. audio arriving late).
+      const onTrackAdded = () => {
+        console.log('[VideoPlayer] New track added to stream, re-attempting play');
+        attemptPlay();
+      };
+      stream.addEventListener('addtrack', onTrackAdded);
+
+      return () => {
+        stream.removeEventListener('addtrack', onTrackAdded);
+      };
     } else {
-      // Stream is null — clear elements
       video.srcObject = null;
       audio.srcObject = null;
       setPlayBlocked(false);
     }
-    
-    return () => {
-      // Clean up properly on stream change
-      if (video.srcObject === stream) video.srcObject = null;
-      if (audio.srcObject === stream) audio.srcObject = null;
-    };
-  }, [stream]);
+  }, [stream, muted, attemptPlay]);
 
-  // Explicitly force the audio element muted state to sync with the React prop.
+  // Force muted state imperatively whenever the prop changes
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.muted = muted;
-      if (!muted) {
-        audioRef.current.volume = 1.0;
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    audio.muted = muted;
+    if (!muted) {
+      audio.volume = 1.0;
+      // If we're unmuting, try to play in case it was blocked before
+      if (audio.srcObject) {
+        audio.play().catch(() => {});
       }
     }
   }, [muted]);
 
-  const handleManualPlay = () => {
-    if (videoRef.current && audioRef.current) {
-      videoRef.current.play().catch(() => {});
-      audioRef.current.play().catch(() => {});
-      setPlayBlocked(false);
+  const handleManualPlay = useCallback(() => {
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    if (video) video.play().catch(() => {});
+    if (audio) {
+      audio.muted = muted;
+      if (!muted) audio.volume = 1.0;
+      audio.play().catch(() => {});
     }
-  };
+    setPlayBlocked(false);
+  }, [muted]);
 
   return (
     <div className={className || ''}>
+      {/* Video element is ALWAYS muted — it only renders visual frames */}
       <video
         ref={videoRef}
-        muted={true}
+        muted
         autoPlay
         playsInline
         className="w-full h-full object-cover"
       />
+      {/* Invisible audio element handles all audio playback independently */}
+      {/* We do NOT set muted as a JSX attribute — we control it imperatively via useEffect */}
       <audio 
         ref={audioRef}
-        muted={muted}
         autoPlay
         playsInline
-        className="hidden"
+        style={{ display: 'none' }}
       />
       {playBlocked && (
         <div 
           onClick={handleManualPlay}
           className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer hover:bg-black/40 transition-colors z-50"
         >
-          <div className="p-4 rounded-full bg-purple-500/80 text-white animate-pulse">
-            <Play className="w-8 h-8 ml-1" />
+          <div className="flex flex-col items-center gap-2">
+            <div className="p-4 rounded-full bg-purple-500/80 text-white animate-pulse">
+              <Play className="w-8 h-8 ml-1" />
+            </div>
+            <span className="text-white text-xs font-medium">Tap to unmute</span>
           </div>
         </div>
       )}

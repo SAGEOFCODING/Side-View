@@ -83,7 +83,7 @@ export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, 
         {/* Name badge + mic indicator */}
         <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
           <div className="px-2 py-1 bg-black/60 backdrop-blur-md rounded-md text-xs font-medium text-white truncate max-w-[70%]">
-            {isLocal ? "You" : name}
+            {name}
           </div>
           {isMicMuted && (
             <div className="w-6 h-6 bg-red-500/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg border border-red-500/20">
