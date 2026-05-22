@@ -350,7 +350,8 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         roomId, 
         peerId: socketRef.current!.id, // use socket id as peer id to keep backend happy
         micMuted: localUser.micMuted,
-        cameraOff: localUser.cameraOff
+        cameraOff: localUser.cameraOff,
+        name: localUser.name
       });
     });
 
@@ -369,11 +370,11 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     });
 
     // Handle list of users already in the room when we join
-    socketRef.current.on('existing_users', (users: Array<{ userId: string; peerId: string; micMuted?: boolean; cameraOff?: boolean }>) => {
+    socketRef.current.on('existing_users', (users: Array<{ userId: string; peerId: string; micMuted?: boolean; cameraOff?: boolean; name?: string }>) => {
       console.log(`[WebRTC] Received existing users:`, users);
       for (const user of users) {
         if (user.userId) {
-          addRemoteUser(user.userId, { micMuted: user.micMuted, cameraOff: user.cameraOff });
+          addRemoteUser(user.userId, { micMuted: user.micMuted, cameraOff: user.cameraOff, name: user.name });
           // We are the joiner, so we initiate the webcam connection to the existing user
           initiateConnection(user.userId, 'webcam');
         }
@@ -381,9 +382,9 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     });
 
     // Handle a new user joining after us
-    socketRef.current.on('user_joined', ({ userId, micMuted, cameraOff }: { userId: string; peerId: string; micMuted?: boolean; cameraOff?: boolean }) => {
+    socketRef.current.on('user_joined', ({ userId, micMuted, cameraOff, name }: { userId: string; peerId: string; micMuted?: boolean; cameraOff?: boolean; name?: string }) => {
       console.log(`[WebRTC] User joined: ${userId}`);
-      addRemoteUser(userId, { micMuted, cameraOff });
+      addRemoteUser(userId, { micMuted, cameraOff, name });
       // We do not initiate webcam call to them; they are the joiner and will call us.
       
       // BUT if we are actively screen sharing, we MUST initiate the screen share connection to them!

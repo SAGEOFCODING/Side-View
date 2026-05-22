@@ -10,6 +10,7 @@ interface UserState {
   micMuted: boolean;
   cameraOff: boolean;
   iceStatus?: string;
+  name?: string;
 }
 
 interface RoomState {
@@ -24,6 +25,7 @@ interface RoomState {
   setConnectionStatus: (status: ConnectionStatus) => void;
   setLocalStream: (stream: MediaStream | null) => void;
   setLocalScreenStream: (stream: MediaStream | null) => void;
+  setLocalName: (name: string) => void;
   setLocalUserFlags: (flags: Partial<UserState>) => void;
   addRemoteUser: (id: string, flags?: Partial<UserState>) => void;
   removeRemoteUser: (id: string) => void;
@@ -58,6 +60,8 @@ export const useStore = create<RoomState>((set) => ({
     set((state) => ({ localUser: { ...state.localUser, stream } })),
   setLocalScreenStream: (stream) => 
     set((state) => ({ localUser: { ...state.localUser, screenStream: stream } })),
+  setLocalName: (name) =>
+    set((state) => ({ localUser: { ...state.localUser, name } })),
   setLocalUserFlags: (flags) =>
     set((state) => ({ localUser: { ...state.localUser, ...flags } })),
     

@@ -192,18 +192,19 @@ io.on('connection', (socket) => {
       peerId: u.peerId,
       micMuted: u.micMuted || false,
       cameraOff: u.cameraOff || false,
+      name: u.name,
     }));
     socket.emit('existing_users', existingUsers);
 
-    // Get initial states if provided
     const micMuted = typeof data === 'object' ? !!data?.micMuted : false;
     const cameraOff = typeof data === 'object' ? !!data?.cameraOff : false;
+    const name = typeof data === 'object' ? data?.name : undefined;
 
     // Add the new user to the room
-    rooms[roomId].users.push({ socketId: socket.id, peerId, micMuted, cameraOff });
+    rooms[roomId].users.push({ socketId: socket.id, peerId, micMuted, cameraOff, name });
     
     // Notify others in the room that a new user joined
-    socket.to(roomId).emit('user_joined', { userId: socket.id, peerId, micMuted, cameraOff });
+    socket.to(roomId).emit('user_joined', { userId: socket.id, peerId, micMuted, cameraOff, name });
     log('info', 'User joined room', {
       socketId: socket.id,
       peerId,

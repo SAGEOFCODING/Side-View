@@ -45,7 +45,7 @@ export default function RoomPage() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const { startScreenShare, stopScreenShare, getMedia, toggleMic, toggleVideo } = useWebRTC(roomId, hasJoined);
-  const { localUser, remoteUsers, connectionStatus, setRoomId, resetStore } = useStore();
+  const { localUser, remoteUsers, connectionStatus, setRoomId, resetStore, setLocalName } = useStore();
   
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -151,6 +151,20 @@ export default function RoomPage() {
           <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Ready to join?</h1>
           <p className="text-gray-400 mb-8 font-medium">Room ID: {roomId}</p>
           
+          <div className="mb-6">
+            <input 
+              type="text" 
+              placeholder="Enter your display name..." 
+              value={localUser.name || ''}
+              onChange={(e) => setLocalName(e.target.value)}
+              className="w-full bg-zinc-900/80 border border-white/10 rounded-xl px-4 py-3 text-white text-center font-medium placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-inner"
+              maxLength={20}
+              onKeyDown={(e) => {
+                 if (e.key === 'Enter' && !isStarting) handleJoin();
+              }}
+            />
+          </div>
+
           <AnimatePresence>
             {permissionError && (
               <motion.div 
@@ -268,7 +282,7 @@ export default function RoomPage() {
           stream={localUser.stream} 
           isLocal 
           muted 
-          name="You" 
+          name={localUser.name || "You"} 
           isMicMuted={localUser.micMuted}
           isCameraOff={localUser.cameraOff}
           index={0}
@@ -278,7 +292,7 @@ export default function RoomPage() {
             key={id} 
             stream={user.stream} 
             muted={false}
-            name={`Guest ${id.substring(0,4)}`}
+            name={user.name || `Guest ${id.substring(0,4)}`}
             isMicMuted={user.micMuted}
             isCameraOff={user.cameraOff}
             iceStatus={user.iceStatus}
