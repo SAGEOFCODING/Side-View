@@ -42,10 +42,14 @@ export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPl
         });
       }
 
-      // Audio might fail independently, but we don't need to block the UI for it, just log it.
+      // Audio might fail independently due to Auto-Play policy! We MUST block the UI so the user can click to play.
       if (audioPlayPromise !== undefined) {
         audioPlayPromise.catch(e => {
-           if (e.name !== 'AbortError') console.error('Audio auto-play failed:', e);
+           if (e.name === 'NotAllowedError') {
+             setPlayBlocked(true);
+           } else if (e.name !== 'AbortError') {
+             console.error('Audio auto-play failed:', e);
+           }
         });
       }
     } else {
