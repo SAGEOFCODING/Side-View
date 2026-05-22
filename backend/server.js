@@ -81,6 +81,7 @@ app.get('/', (req, res) => {
     uptime: Math.floor(process.uptime()),
     rooms: roomCount,
     connectedUsers: totalUsers,
+    allowedOrigins: ALLOWED_ORIGINS,
   });
 });
 
