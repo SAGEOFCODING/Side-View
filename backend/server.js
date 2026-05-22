@@ -198,7 +198,8 @@ io.on('connection', (socket) => {
 
     const micMuted = typeof data === 'object' ? !!data?.micMuted : false;
     const cameraOff = typeof data === 'object' ? !!data?.cameraOff : false;
-    const name = typeof data === 'object' ? data?.name : undefined;
+    const rawName = typeof data === 'object' ? data?.name : undefined;
+    const name = (typeof rawName === 'string' ? rawName.trim().substring(0, 20) : undefined) || undefined;
 
     // Add the new user to the room
     rooms[roomId].users.push({ socketId: socket.id, peerId, micMuted, cameraOff, name });
