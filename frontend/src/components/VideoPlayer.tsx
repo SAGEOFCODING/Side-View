@@ -9,6 +9,7 @@ interface VideoPlayerProps {
 
 export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPlayerProps>(function VideoPlayer({ stream, muted = false, className }, forwardedRef) {
   const internalRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   // Expose the internal video element to the parent (for PiP)
   React.useImperativeHandle(forwardedRef, () => internalRef.current as HTMLVideoElement);
@@ -18,15 +19,17 @@ export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPl
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    const audio = audioRef.current;
+    if (!video || !audio) return;
 
     if (stream) {
       // Only reassign srcObject if the stream actually changed
-      if (video.srcObject !== stream) {
-        video.srcObject = stream;
-      }
+      if (video.srcObject !== stream) video.srcObject = stream;
+      if (audio.srcObject !== stream) audio.srcObject = stream;
       
       const playPromise = video.play();
+      const audioPlayPromise = audio.play();
+
       if (playPromise !== undefined) {
         playPromise.then(() => {
           setPlayBlocked(false);
@@ -36,39 +39,43 @@ export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPl
           } else if (e.name !== 'AbortError') {
             console.error('Auto-play failed:', e);
           }
-          // AbortError is expected when component re-renders and interrupts play — ignore it
+        });
+      }
+
+      // Audio might fail independently, but we don't need to block the UI for it, just log it.
+      if (audioPlayPromise !== undefined) {
+        audioPlayPromise.catch(e => {
+           if (e.name !== 'AbortError') console.error('Audio auto-play failed:', e);
         });
       }
     } else {
-      // Stream is null — clear the video element so it doesn't show a frozen frame
+      // Stream is null — clear elements
       video.srcObject = null;
+      audio.srcObject = null;
       setPlayBlocked(false);
     }
     
     return () => {
       // Clean up properly on stream change
-      if (video.srcObject === stream) {
-        video.srcObject = null;
-      }
+      if (video.srcObject === stream) video.srcObject = null;
+      if (audio.srcObject === stream) audio.srcObject = null;
     };
   }, [stream]);
 
-  // Explicitly force the video element muted state to sync with the React prop.
-  // This bypasses a known bug in React where dynamically changing muted={false} fails to actually unmute the HTML element.
+  // Explicitly force the audio element muted state to sync with the React prop.
   useEffect(() => {
-    if (internalRef.current) {
-      internalRef.current.muted = muted;
+    if (audioRef.current) {
+      audioRef.current.muted = muted;
       if (!muted) {
-        internalRef.current.volume = 1.0;
+        audioRef.current.volume = 1.0;
       }
     }
   }, [muted]);
 
   const handleManualPlay = () => {
-    if (videoRef.current) {
-      videoRef.current.play().catch(() => {
-        // Ignore errors from manual play attempt
-      });
+    if (videoRef.current && audioRef.current) {
+      videoRef.current.play().catch(() => {});
+      audioRef.current.play().catch(() => {});
       setPlayBlocked(false);
     }
   };
@@ -77,10 +84,17 @@ export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPl
     <div className={className || ''}>
       <video
         ref={videoRef}
-        muted={muted}
+        muted={true}
         autoPlay
         playsInline
         className="w-full h-full object-cover"
+      />
+      <audio 
+        ref={audioRef}
+        muted={muted}
+        autoPlay
+        playsInline
+        className="hidden"
       />
       {playBlocked && (
         <div 

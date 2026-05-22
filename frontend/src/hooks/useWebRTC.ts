@@ -518,9 +518,10 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       
       if (screenStream.getAudioTracks().length === 0) {
         console.warn("[WebRTC] Screen stream was acquired, but it contains NO audio tracks.");
+        alert("Warning: Your screen share has NO audio! If you wanted to share audio, you must check the 'Share tab audio' or 'Share system audio' checkbox in the browser's screen share popup menu.");
       }
 
-      // Connect screen stream to all existing remote users
+      // Initialize screen share connections with all existing remote users
       Object.keys(useStore.getState().remoteUsers).forEach((remoteUserId) => {
         initiateConnection(remoteUserId, 'screen');
       });
