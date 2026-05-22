@@ -109,6 +109,24 @@ export default function RoomPage() {
   const handleJoin = async () => {
     setIsStarting(true);
     setPermissionError(null);
+    
+    // CRITICAL: Unlock browser audio engine during this user gesture.
+    // Chrome blocks unmuted audio playback until a user gesture has "touched" the audio system.
+    // By creating and playing a silent AudioContext here (during the click), we permanently
+    // unlock audio for all future WebRTC streams that arrive seconds/minutes later.
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      if (ctx.state === 'suspended') await ctx.resume();
+      console.log('[Audio] Browser audio engine unlocked via silent AudioContext');
+    } catch (e) {
+      console.warn('[Audio] Could not unlock audio context:', e);
+    }
+
     try {
       const { stream, error } = await getMedia();
       if (!stream) {

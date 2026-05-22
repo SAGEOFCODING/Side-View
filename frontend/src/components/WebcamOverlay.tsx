@@ -47,7 +47,7 @@ export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, 
             ref={videoRef}
             stream={stream} 
             muted={isLocal || muted} 
-            className="relative w-full h-full pointer-events-none"
+            className="relative w-full h-full"
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950/80 backdrop-blur-md gap-3 border border-white/5">
