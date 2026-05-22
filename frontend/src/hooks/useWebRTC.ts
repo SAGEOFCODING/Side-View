@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useStore } from '../store/useStore';
 
-const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://sideview-backend-252675432928.us-central1.run.app';
+const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://stream-backend-o7nw.onrender.com';
 
 // ICE server configuration — TURN credentials loaded from environment
 function getIceServers() {
@@ -291,6 +291,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
     // Connect to Socket.io for signaling
     socketRef.current = io(SOCKET_SERVER_URL, {
+      transports: ['websocket'],
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
