@@ -12,9 +12,10 @@ interface WebcamOverlayProps {
   name: string;
   isMicMuted?: boolean;
   isCameraOff?: boolean;
+  iceStatus?: string;
 }
 
-export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, isLocal, name, isMicMuted, isCameraOff }: WebcamOverlayProps) {
+export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, isLocal, name, isMicMuted, isCameraOff, iceStatus }: WebcamOverlayProps) {
   return (
     <motion.div
       drag
@@ -42,6 +43,14 @@ export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, 
         
         {/* Ring overlay */}
         <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl pointer-events-none" />
+
+        {/* Firewall Blocked Overlay */}
+        {(iceStatus === 'failed' || iceStatus === 'disconnected') && !isLocal && (
+          <div className="absolute inset-0 bg-red-950/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-4 text-center border border-red-500/50 rounded-2xl">
+            <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Firewall Blocked</span>
+            <span className="text-[9px] text-zinc-300 leading-tight">TURN Server Required</span>
+          </div>
+        )}
         
         {/* Name badge + mic indicator */}
         <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">

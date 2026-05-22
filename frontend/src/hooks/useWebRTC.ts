@@ -166,6 +166,13 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       console.log(`[WebRTC] Connection state to ${targetUserId} (${type}): ${pc.connectionState}`);
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC] ICE Connection state to ${targetUserId} (${type}): ${pc.iceConnectionState}`);
+      if (type === 'webcam') {
+        useStore.getState().setRemoteUserFlags(targetUserId, { iceStatus: pc.iceConnectionState });
+      }
+    };
+
     // Create SDP offer
     try {
       const offer = await pc.createOffer();
@@ -249,6 +256,13 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
       pc.onconnectionstatechange = () => {
         console.log(`[WebRTC] Connection state for incoming ${senderId} (${connectionType}): ${pc.connectionState}`);
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[WebRTC] ICE Connection state for incoming ${senderId} (${connectionType}): ${pc.iceConnectionState}`);
+        if (connectionType === 'webcam') {
+          useStore.getState().setRemoteUserFlags(senderId, { iceStatus: pc.iceConnectionState });
+        }
       };
     }
 

@@ -9,6 +9,7 @@ interface UserState {
   screenStream: MediaStream | null;
   micMuted: boolean;
   cameraOff: boolean;
+  iceStatus?: string;
 }
 
 interface RoomState {

@@ -231,9 +231,24 @@ export default function RoomPage() {
               <MonitorUp className="w-10 h-10 text-white/40" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-3">Theater is empty</h2>
-            <p className="text-gray-400 max-w-md mx-auto text-lg">
-              Waiting for someone to start a screen share. When they do, it will appear right here in cinematic mode.
-            </p>
+            {participantCount === 1 ? (
+              <div className="flex flex-col items-center gap-4">
+                <p className="text-gray-400 max-w-md mx-auto text-lg">
+                  You are the only one here! Copy the link below and send it to a friend so they can join this exact room.
+                </p>
+                <button
+                  onClick={copyLink}
+                  className="px-6 py-3 rounded-full bg-purple-600/20 text-purple-400 font-semibold border border-purple-500/30 hover:bg-purple-600/30 transition-all flex items-center gap-2 animate-pulse"
+                >
+                  <Link className="w-5 h-5" />
+                  {copied ? "Link Copied!" : "Copy Room Link"}
+                </button>
+              </div>
+            ) : (
+              <p className="text-gray-400 max-w-md mx-auto text-lg">
+                Waiting for someone to start a screen share. When they do, it will appear right here in cinematic mode.
+              </p>
+            )}
             <div className="mt-6 flex items-center gap-2 text-zinc-600 text-sm">
               <span className="hidden md:inline">Press</span>
               <kbd className="hidden md:inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono border border-zinc-700">M</kbd>
@@ -265,6 +280,7 @@ export default function RoomPage() {
             name={`Guest ${id.substring(0,4)}`}
             isMicMuted={user.micMuted}
             isCameraOff={user.cameraOff}
+            iceStatus={user.iceStatus}
           />
         ))}
       </div>
