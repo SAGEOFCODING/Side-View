@@ -138,13 +138,21 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
   const initiateConnection = useCallback(async (targetUserId: string, type: 'webcam' | 'screen') => {
     console.log(`[WebRTC] Initiating ${type} connection to ${targetUserId}`);
     
+    // Close existing connection if it exists to prevent leaks on reconnects
+    const connections = type === 'webcam' ? webcamConnectionsRef : screenConnectionsRef;
+    if (connections.current[targetUserId]) {
+      console.log(`[WebRTC] Closing stale existing ${type} connection to ${targetUserId}`);
+      try {
+        connections.current[targetUserId].close();
+      } catch (err) {
+        console.warn(`[WebRTC] Error closing stale ${type} connection:`, err);
+      }
+      delete connections.current[targetUserId];
+    }
+
     // Create new peer connection
     const pc = new RTCPeerConnection({ iceServers: getIceServers() });
-    if (type === 'webcam') {
-      webcamConnectionsRef.current[targetUserId] = pc;
-    } else {
-      screenConnectionsRef.current[targetUserId] = pc;
-    }
+    connections.current[targetUserId] = pc;
 
     // Add local stream tracks to the connection
     const localStream = type === 'webcam'
@@ -387,6 +395,8 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
     socketRef.current.on('error_message', (data: { message: string }) => {
       console.error('[WebRTC] Server error:', data.message);
+      alert("Error: " + data.message);
+      window.location.href = '/';
     });
 
     socketRef.current.on('server_shutdown', () => {
@@ -458,6 +468,11 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     socketRef.current.on('reconnect', () => {
       console.log('[WebRTC] Socket reconnected');
       setConnectionStatus('connected');
+      
+      // Clean up all active connections before re-joining to prevent leaks
+      Object.keys(webcamConnectionsRef.current).forEach(userId => closeConnection(userId, 'webcam'));
+      Object.keys(screenConnectionsRef.current).forEach(userId => closeConnection(userId, 'screen'));
+      remoteStreamsRef.current = {};
       
       const localUser = useStore.getState().localUser;
       socketRef.current?.emit('join_room', { 
@@ -589,45 +604,177 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     }
   }, [initiateConnection, setLocalScreenStream, stopScreenShare]);
 
-  const toggleMic = useCallback(() => {
-    const stream = useStore.getState().localUser.stream;
-    if (stream) {
-      const audioTrack = stream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        const isMuted = !audioTrack.enabled;
-        setLocalUserFlags({ micMuted: isMuted });
-        
-        if (socketRef.current) {
-          socketRef.current.emit('user_state_changed', { 
-            roomId, 
-            micMuted: isMuted, 
-            cameraOff: useStore.getState().localUser.cameraOff 
-          });
-        }
-      }
-    }
-  }, [roomId, setLocalUserFlags]);
+  const toggleMic = useCallback(async () => {
+    let stream = useStore.getState().localUser.stream;
 
-  const toggleVideo = useCallback(() => {
-    const stream = useStore.getState().localUser.stream;
-    if (stream) {
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        const isOff = !videoTrack.enabled;
-        setLocalUserFlags({ cameraOff: isOff });
+    // 1. If no local stream exists, acquire it
+    if (!stream) {
+      console.log("[WebRTC] No local stream found. Acquiring stream with video and audio...");
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        stream = newStream;
+        setLocalStream(stream);
+      } catch (err) {
+        console.error("[WebRTC] Failed to acquire camera/mic:", err);
+        alert("Failed to access microphone: " + (err instanceof Error ? err.message : String(err)));
+        return;
+      }
+    }
+
+    let audioTrack = stream.getAudioTracks()[0];
+
+    // 2. If stream exists but has no audio track, acquire one
+    if (!audioTrack) {
+      console.log("[WebRTC] Local stream exists but has no audio track. Acquiring audio track...");
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        audioTrack = tempStream.getAudioTracks()[0];
+        stream.addTrack(audioTrack);
         
-        if (socketRef.current) {
-          socketRef.current.emit('user_state_changed', { 
-            roomId, 
-            micMuted: useStore.getState().localUser.micMuted, 
-            cameraOff: isOff 
+        // Force Zustand update
+        setLocalStream(new MediaStream(stream.getTracks()));
+      } catch (err) {
+        console.error("[WebRTC] Failed to acquire audio track:", err);
+        alert("Failed to access microphone: " + (err instanceof Error ? err.message : String(err)));
+        return;
+      }
+    }
+
+    // 3. Toggle the audio track state
+    audioTrack.enabled = !audioTrack.enabled;
+    const isMuted = !audioTrack.enabled;
+    setLocalUserFlags({ micMuted: isMuted });
+
+    // 4. Synchronize with active peer connections
+    for (const [peerId, pc] of Object.entries(webcamConnectionsRef.current)) {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+      if (sender) {
+        console.log(`[WebRTC] Audio track state updated for peer ${peerId}`);
+      } else {
+        console.log(`[WebRTC] Adding new audio track to peer ${peerId} and renegotiating`);
+        try {
+          pc.addTrack(audioTrack, stream);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current?.emit('signal', {
+            targetId: peerId,
+            signal: {
+              type: 'offer',
+              sdp: offer.sdp,
+              connectionType: 'webcam'
+            }
           });
+        } catch (e) {
+          console.error(`[WebRTC] Error adding audio track to peer ${peerId}:`, e);
         }
       }
     }
-  }, [roomId, setLocalUserFlags]);
+
+    // 5. Notify remote users via signaling server
+    if (socketRef.current) {
+      socketRef.current.emit('user_state_changed', {
+        roomId,
+        micMuted: isMuted,
+        cameraOff: useStore.getState().localUser.cameraOff
+      });
+    }
+  }, [roomId, setLocalStream, setLocalUserFlags]);
+
+  const toggleVideo = useCallback(async () => {
+    let stream = useStore.getState().localUser.stream;
+
+    // 1. If no local stream exists at all, try to acquire it
+    if (!stream) {
+      console.log("[WebRTC] No local stream found. Acquiring stream with video and audio...");
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        stream = newStream;
+        setLocalStream(stream);
+      } catch (err) {
+        console.error("[WebRTC] Failed to acquire camera/mic:", err);
+        alert("Failed to access camera: " + (err instanceof Error ? err.message : String(err)));
+        return;
+      }
+    }
+
+    let videoTrack = stream.getVideoTracks()[0];
+
+    // 2. If stream exists but has no video track, acquire one
+    if (!videoTrack) {
+      console.log("[WebRTC] Local stream exists but has no video track. Acquiring video track...");
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoTrack = tempStream.getVideoTracks()[0];
+        stream.addTrack(videoTrack);
+        
+        // Force Zustand update
+        setLocalStream(new MediaStream(stream.getTracks()));
+      } catch (err) {
+        console.error("[WebRTC] Failed to acquire video track:", err);
+        alert("Failed to access camera: " + (err instanceof Error ? err.message : String(err)));
+        return;
+      }
+    }
+
+    // 3. Toggle the video track state
+    videoTrack.enabled = !videoTrack.enabled;
+    const isOff = !videoTrack.enabled;
+    setLocalUserFlags({ cameraOff: isOff });
+
+    // 4. Synchronize with active peer connections
+    for (const [peerId, pc] of Object.entries(webcamConnectionsRef.current)) {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        console.log(`[WebRTC] Video track state updated for peer ${peerId}`);
+      } else {
+        console.log(`[WebRTC] Adding new video track to peer ${peerId} and renegotiating`);
+        try {
+          pc.addTrack(videoTrack, stream);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current?.emit('signal', {
+            targetId: peerId,
+            signal: {
+              type: 'offer',
+              sdp: offer.sdp,
+              connectionType: 'webcam'
+            }
+          });
+        } catch (e) {
+          console.error(`[WebRTC] Error adding video track to peer ${peerId}:`, e);
+        }
+      }
+    }
+
+    // 5. Notify remote users via signaling server
+    if (socketRef.current) {
+      socketRef.current.emit('user_state_changed', {
+        roomId,
+        micMuted: useStore.getState().localUser.micMuted,
+        cameraOff: isOff
+      });
+    }
+  }, [roomId, setLocalStream, setLocalUserFlags]);
 
   return { startScreenShare, stopScreenShare, getMedia, toggleMic, toggleVideo };
 }

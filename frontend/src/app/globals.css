@@ -20,6 +20,9 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
+  body.is-electron {
+    padding-top: 2.5rem;
+  }
 }
 
 .glass-panel {

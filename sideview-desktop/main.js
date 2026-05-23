@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 // Allowed origin for the loaded page
@@ -14,11 +14,21 @@ function createWindow() {
     height: 720,
     title: "SideView",
     icon: path.join(__dirname, 'icon.png'),
+    frame: false, // frameless window
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
     }
+  });
+
+  // Notify frontend when window maximize state changes natively
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window-maximized', true);
+  });
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window-maximized', false);
   });
 
   // Load the NextJS frontend URL
@@ -59,6 +69,44 @@ function createWindow() {
     }
   });
 }
+
+// Register IPC handlers globally
+ipcMain.on('window-control', (event, action) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  switch (action) {
+    case 'minimize':
+      win.minimize();
+      break;
+    case 'maximize':
+      win.maximize();
+      break;
+    case 'unmaximize':
+      win.unmaximize();
+      break;
+    case 'close':
+      win.close();
+      break;
+  }
+});
+
+ipcMain.handle('window-control-toggle-always-on-top', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return false;
+  const nextState = !win.isAlwaysOnTop();
+  win.setAlwaysOnTop(nextState, 'screen-saver');
+  event.sender.send('window-always-on-top-changed', nextState);
+  return nextState;
+});
+
+ipcMain.handle('get-window-state', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return { isMaximized: false, isAlwaysOnTop: false };
+  return {
+    isMaximized: win.isMaximized(),
+    isAlwaysOnTop: win.isAlwaysOnTop(),
+  };
+});
 
 app.whenReady().then(() => {
   createWindow();

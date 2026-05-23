@@ -23,10 +23,33 @@ export default function Home() {
 
   const joinRoom = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinCode.trim()) return;
+    const trimmedInput = joinCode.trim();
+    if (!trimmedInput) return;
+
+    let targetRoomId = trimmedInput;
+
+    // Check if the pasted string is a URL containing the room path
+    try {
+      if (trimmedInput.includes('/room/')) {
+        const parts = trimmedInput.split('/room/');
+        const extracted = parts[parts.length - 1].split('?')[0].split('#')[0];
+        if (extracted) {
+          targetRoomId = extracted;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to parse pasted room URL:", err);
+    }
+
+    // Alphanumeric room ID validation on client
+    if (!/^[a-zA-Z0-9_-]+$/.test(targetRoomId)) {
+      alert("Invalid room ID format. Please use only alphanumeric characters, hyphens, or underscores.");
+      return;
+    }
+
     setIsJoining(true);
     setTimeout(() => {
-      router.push(`/room/${joinCode.trim()}`);
+      router.push(`/room/${targetRoomId}`);
     }, 600);
   };
 
@@ -86,11 +109,11 @@ export default function Home() {
           <form onSubmit={joinRoom} className="flex items-center gap-2">
             <input
               type="text"
-              placeholder="5-digit Code"
-              maxLength={5}
+              placeholder="5-digit Code or URL"
+              maxLength={250}
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-full px-6 py-4 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors w-40 text-center text-lg"
+              className="bg-white/5 border border-white/10 rounded-full px-6 py-4 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors w-48 md:w-64 text-center text-lg"
             />
             <button
               type="submit"

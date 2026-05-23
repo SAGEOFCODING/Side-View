@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { TitleBar } from "@/components/TitleBar";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,7 +46,10 @@ export default function RootLayout({
       lang="en"
       className={`h-full antialiased dark ${inter.variable}`}
     >
-      <body className="min-h-full flex flex-col bg-black text-white font-sans">{children}</body>
+      <body className="min-h-full flex flex-col bg-black text-white font-sans">
+        <TitleBar />
+        {children}
+      </body>
     </html>
   );
 }

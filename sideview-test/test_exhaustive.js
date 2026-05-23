@@ -5,7 +5,7 @@ async function runExhaustiveTest() {
   console.log('[Test] STARTING EXHAUSTIVE PRODUCTION E2E CONNECTION TEST');
   console.log('============================================================');
   
-  const roomUrl = 'https://sideview.vercel.app/room/exhaustive-production-test';
+  const roomUrl = process.env.TEST_URL || 'http://localhost:3000/room/exhaustive-local-test';
 
   const browserOptions = {
     headless: true,

@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 
 async function runTest() {
   console.log('[Test] Starting End-to-End WebRTC Test');
-  const roomUrl = 'https://frontend-beta-six-udn37kbo37.vercel.app/room/test-123456';
+  const roomUrl = process.env.TEST_URL || 'http://localhost:3000/room/test-123456';
 
   const browserOptions = {
     headless: true, // Run headless for automation

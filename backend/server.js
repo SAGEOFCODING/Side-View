@@ -167,16 +167,16 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Enforce max users per room (check before joining Socket.io room)
+    if (rooms[roomId] && rooms[roomId].users.length >= MAX_USERS_PER_ROOM) {
+      socket.emit('room_full', { message: `This room is currently full (max ${MAX_USERS_PER_ROOM} participants).` });
+      return;
+    }
+
     socket.join(roomId);
 
     if (!rooms[roomId]) {
       rooms[roomId] = { users: [], createdAt: new Date().toISOString() };
-    }
-
-    // Enforce max users per room
-    if (rooms[roomId].users.length >= MAX_USERS_PER_ROOM) {
-      socket.emit('room_full', { message: `This room is currently full (max ${MAX_USERS_PER_ROOM} participants).` });
-      return;
     }
 
     // Prevent duplicate joins
