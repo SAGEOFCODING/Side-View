@@ -61,8 +61,12 @@ export const useStore = create<RoomState>((set) => ({
     set((state) => ({ localUser: { ...state.localUser, stream } })),
   setLocalScreenStream: (stream) => 
     set((state) => ({ localUser: { ...state.localUser, screenStream: stream } })),
-  setLocalName: (name) =>
-    set((state) => ({ localUser: { ...state.localUser, name } })),
+  setLocalName: (name) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sideview-display-name', name);
+    }
+    set((state) => ({ localUser: { ...state.localUser, name } }));
+  },
   setLocalUserFlags: (flags) =>
     set((state) => ({ localUser: { ...state.localUser, ...flags } })),
     

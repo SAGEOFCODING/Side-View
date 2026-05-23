@@ -55,6 +55,16 @@ export default function RoomPage() {
     setRoomId(roomId);
   }, [roomId, setRoomId]);
 
+  // Load saved display name from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedName = localStorage.getItem('sideview-display-name');
+      if (savedName) {
+        setLocalName(savedName);
+      }
+    }
+  }, [setLocalName]);
+
   // Hardware and State Cleanup on Unmount
   useEffect(() => {
     return () => {
