@@ -258,7 +258,7 @@ export default function RoomPage() {
     Object.values(remoteUsers).find(u => u.screenStream)?.screenStream;
 
   return (
-    <main className={`relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col cinema-mode-transition ${isCinemaActive ? 'yt-cinema' : ''} ${isCinemaActive && !isControlsVisible ? 'yt-controls-hidden' : ''}`}>
+    <main className={`relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col cinema-mode-transition ${isCinemaActive ? 'yt-fullscreen' : ''} ${isCinemaActive && !isControlsVisible ? 'yt-controls-hidden' : ''}`}>
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0 cinema-bg-blobs">
         <div className="absolute top-1/4 left-1/4 w-[40vw] h-[40vw] bg-purple-600/10 rounded-full blur-[120px]" />
