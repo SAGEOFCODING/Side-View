@@ -20,6 +20,8 @@ interface RoomState {
   localUser: UserState;
   remoteUsers: Record<string, UserState>;
   isTheaterMode: boolean;
+  hostCinemaMode: boolean;
+  cinemaOverrideOff: boolean;
   setRoomId: (id: string) => void;
   setSocketId: (id: string) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -33,6 +35,8 @@ interface RoomState {
   setRemoteScreenStream: (id: string, stream: MediaStream | null) => void;
   setRemoteUserFlags: (id: string, flags: Partial<UserState>) => void;
   toggleTheaterMode: () => void;
+  setHostCinemaMode: (on: boolean) => void;
+  setCinemaOverrideOff: (off: boolean) => void;
   resetStore: () => void;
 }
 
@@ -53,6 +57,8 @@ export const useStore = create<RoomState>((set) => ({
   localUser: { ...initialLocalUser },
   remoteUsers: {},
   isTheaterMode: false,
+  hostCinemaMode: false,
+  cinemaOverrideOff: false,
 
   setRoomId: (id) => set({ roomId: id }),
   setSocketId: (id) => set({ socketId: id }),
@@ -122,6 +128,8 @@ export const useStore = create<RoomState>((set) => ({
     };
   }),
   toggleTheaterMode: () => set((state) => ({ isTheaterMode: !state.isTheaterMode })),
+  setHostCinemaMode: (on) => set({ hostCinemaMode: on, cinemaOverrideOff: false }),
+  setCinemaOverrideOff: (off) => set({ cinemaOverrideOff: off }),
   resetStore: () => set({
     roomId: null,
     socketId: null,
@@ -129,5 +137,7 @@ export const useStore = create<RoomState>((set) => ({
     localUser: { ...initialLocalUser },
     remoteUsers: {},
     isTheaterMode: false,
+    hostCinemaMode: false,
+    cinemaOverrideOff: false,
   }),
 }));

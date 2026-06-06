@@ -193,6 +193,7 @@ io.on('connection', (socket) => {
       micMuted: u.micMuted || false,
       cameraOff: u.cameraOff || false,
       name: u.name,
+      isFullscreen: u.isFullscreen || false,
     }));
     socket.emit('existing_users', existingUsers);
 
@@ -202,7 +203,7 @@ io.on('connection', (socket) => {
     const name = typeof rawName === 'string' && rawName.trim().length > 0 ? rawName.trim().substring(0, 20) : '';
 
     // Add the new user to the room
-    rooms[roomId].users.push({ socketId: socket.id, peerId, micMuted, cameraOff, name });
+    rooms[roomId].users.push({ socketId: socket.id, peerId, micMuted, cameraOff, name, isFullscreen: false });
     
     // Notify others in the room that a new user joined
     socket.to(roomId).emit('user_joined', { userId: socket.id, peerId, micMuted, cameraOff, name });
@@ -253,6 +254,25 @@ io.on('connection', (socket) => {
     if (roomId && isValidRoomId(roomId)) {
       socket.to(roomId).emit('screen_share_stopped', { userId: socket.id });
       log('info', 'Screen share stopped', { socketId: socket.id, roomId });
+    }
+  });
+
+  // Host fullscreen change — relay to all other users in the room
+  socket.on('host_fullscreen_change', (data) => {
+    const roomId = data?.roomId;
+    if (roomId && isValidRoomId(roomId)) {
+      const room = rooms[roomId];
+      if (room) {
+        const user = room.users.find(u => u.socketId === socket.id);
+        if (user) {
+          user.isFullscreen = !!data.isFullscreen;
+        }
+      }
+      socket.to(roomId).emit('host_fullscreen_change', {
+        userId: socket.id,
+        isFullscreen: !!data.isFullscreen,
+      });
+      log('info', 'Host fullscreen change', { socketId: socket.id, roomId, isFullscreen: !!data.isFullscreen });
     }
   });
 

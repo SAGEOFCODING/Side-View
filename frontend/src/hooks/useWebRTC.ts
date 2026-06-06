@@ -75,6 +75,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     setConnectionStatus,
     setLocalUserFlags,
     setRemoteUserFlags,
+    setHostCinemaMode,
   } = useStore();
 
   const getMedia = useCallback(async (): Promise<{ stream: MediaStream | null; error: string | null }> => {
@@ -404,13 +405,18 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     });
 
     // Handle list of users already in the room when we join
-    socketRef.current.on('existing_users', (users: Array<{ userId: string; peerId: string; micMuted?: boolean; cameraOff?: boolean; name?: string }>) => {
+    socketRef.current.on('existing_users', (users: Array<{ userId: string; peerId: string; micMuted?: boolean; cameraOff?: boolean; name?: string; isFullscreen?: boolean }>) => {
       console.log(`[WebRTC] Received existing users:`, users);
       for (const user of users) {
         if (user.userId) {
           addRemoteUser(user.userId, { micMuted: user.micMuted, cameraOff: user.cameraOff, name: user.name });
           // We are the joiner, so we initiate the webcam connection to the existing user
           initiateConnection(user.userId, 'webcam');
+          // If this existing user is in fullscreen, activate cinema mode for us
+          if (user.isFullscreen) {
+            console.log(`[WebRTC] Existing user ${user.userId} is in fullscreen, enabling cinema mode`);
+            setHostCinemaMode(true);
+          }
         }
       }
     });
@@ -438,6 +444,14 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       removeRemoteUser(userId);
       closeConnection(userId, 'webcam');
       closeConnection(userId, 'screen');
+      // If the user who left was in fullscreen/cinema mode, exit cinema mode
+      setHostCinemaMode(false);
+    });
+
+    // Handle host fullscreen change (cinema mode for viewers)
+    socketRef.current.on('host_fullscreen_change', ({ userId, isFullscreen }: { userId: string; isFullscreen: boolean }) => {
+      console.log(`[WebRTC] Host ${userId} fullscreen changed: ${isFullscreen}`);
+      setHostCinemaMode(isFullscreen);
     });
 
     // Handle remote user stopping their screen share
@@ -484,9 +498,37 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       });
     });
 
+    // --- Fullscreen detection (host side) ---
+    let fullscreenPollInterval: ReturnType<typeof setInterval> | null = null;
+    let lastFullscreenState = false;
+
+    const emitFullscreenChange = (isFullscreen: boolean) => {
+      if (isFullscreen === lastFullscreenState) return;
+      lastFullscreenState = isFullscreen;
+      console.log(`[WebRTC] Local fullscreen changed: ${isFullscreen}`);
+      socketRef.current?.emit('host_fullscreen_change', { roomId, isFullscreen });
+    };
+
+    const handleFullscreenChange = () => {
+      emitFullscreenChange(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    // F11 fallback: poll document.fullscreenElement every 500ms
+    // (F11 in some browsers doesn't fire fullscreenchange)
+    fullscreenPollInterval = setInterval(() => {
+      const isFs = !!document.fullscreenElement || (window.innerHeight === screen.height && window.innerWidth === screen.width);
+      emitFullscreenChange(isFs);
+    }, 500);
+
     return () => {
       console.log('[WebRTC] Cleaning up...');
       isSetupRef.current = false;
+
+      // Clean up fullscreen listeners
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      if (fullscreenPollInterval) clearInterval(fullscreenPollInterval);
 
       if (screenTrackListenerRef.current) {
         const { track, handler } = screenTrackListenerRef.current;

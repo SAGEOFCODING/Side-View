@@ -9,7 +9,7 @@ import { WebcamOverlay } from "@/components/WebcamOverlay";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, StopCircle, 
-  Link, Check, LogIn, LogOut, Users, Wifi, WifiOff, Loader2 
+  Link, Check, LogIn, LogOut, Users, Wifi, WifiOff, Loader2, Minimize2 
 } from "lucide-react";
 
 // Connection status indicator — extracted to module level for React Compiler
@@ -45,7 +45,7 @@ export default function RoomPage() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const { startScreenShare, stopScreenShare, getMedia, toggleMic, toggleVideo } = useWebRTC(roomId, hasJoined);
-  const { localUser, remoteUsers, connectionStatus, setRoomId, resetStore, setLocalName } = useStore();
+  const { localUser, remoteUsers, connectionStatus, setRoomId, resetStore, setLocalName, hostCinemaMode, cinemaOverrideOff, setCinemaOverrideOff } = useStore();
   
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -160,6 +160,7 @@ export default function RoomPage() {
   };
 
   const participantCount = 1 + Object.keys(remoteUsers).length;
+  const isCinemaActive = hostCinemaMode && !cinemaOverrideOff;
 
   // Pre-join screen
   if (!hasJoined) {
@@ -231,15 +232,15 @@ export default function RoomPage() {
     Object.values(remoteUsers).find(u => u.screenStream)?.screenStream;
 
   return (
-    <main className="relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col">
+    <main className={`relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col cinema-mode-transition ${isCinemaActive ? 'cinema-mode' : ''}`}>
       {/* Dynamic Background */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 cinema-bg-blobs">
         <div className="absolute top-1/4 left-1/4 w-[40vw] h-[40vw] bg-purple-600/10 rounded-full blur-[120px]" />
         <div className="absolute bottom-1/4 right-1/4 w-[40vw] h-[40vw] bg-blue-600/10 rounded-full blur-[120px]" />
       </div>
 
       {/* Top Status Bar */}
-      <div className="relative z-30 p-4 flex items-center justify-between">
+      <div className="relative z-30 p-4 flex items-center justify-between cinema-status-bar">
         <div className="flex items-center gap-4">
           <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-3 border border-white/10">
             <Users className="w-4 h-4 text-purple-400" />
@@ -255,7 +256,7 @@ export default function RoomPage() {
       {/* Main Content Area */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 md:px-8 min-h-0">
         {activeScreenShare ? (
-          <div className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden glass-panel shadow-2xl relative border border-white/5 bg-black/40">
+          <div className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden glass-panel shadow-2xl relative border border-white/5 bg-black/40 cinema-screen-container">
             <VideoPlayer 
               stream={activeScreenShare} 
               muted={!!localUser.screenStream}
@@ -304,8 +305,19 @@ export default function RoomPage() {
         )}
       </div>
 
+      {/* Exit Cinema Mode Button (viewer-only, visible only in cinema mode) */}
+      <button
+        className="cinema-exit-btn"
+        onClick={() => setCinemaOverrideOff(true)}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <Minimize2 style={{ width: 14, height: 14 }} />
+          Exit Cinema Mode
+        </span>
+      </button>
+
       {/* Floating Webcams Container */}
-      <div className="absolute inset-0 z-40 pointer-events-none">
+      <div className="absolute inset-0 z-40 pointer-events-none cinema-webcam-container">
         <WebcamOverlay 
           stream={localUser.stream} 
           isLocal 
@@ -330,7 +342,7 @@ export default function RoomPage() {
       </div>
 
       {/* Bottom Control Bar */}
-      <div className="relative z-30 p-4 md:p-6 flex justify-center">
+      <div className="relative z-30 p-4 md:p-6 flex justify-center cinema-controls">
         <div className="glass-panel px-4 md:px-8 py-3 md:py-4 rounded-full flex items-center gap-3 md:gap-6 shadow-2xl border border-white/10 bg-black/40 backdrop-blur-xl">
           <button 
             id="toggle-mic-btn"
