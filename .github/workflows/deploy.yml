@@ -1,0 +1,35 @@
+name: Deploy to DigitalOcean Droplet
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Droplet via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          # The deployment script that runs on your server
+          script: |
+            echo "Starting deployment..."
+            
+            # Navigate to the project directory
+            cd /opt/sideview || { echo "Directory /opt/sideview not found!"; exit 1; }
+            
+            # Pull the latest changes from the main branch
+            git pull origin main
+            
+            # Rebuild and restart the Docker containers in detached mode
+            docker compose up -d --build
+            
+            # Prune old dangling images to save disk space
+            docker image prune -f
+            
+            echo "Deployment completed successfully!"
