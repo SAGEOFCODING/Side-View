@@ -21,6 +21,22 @@ fi
 echo "Using domain: $DOMAIN"
 echo ""
 
+# Ask if they want to configure a custom TURN server
+read -p "Do you want to configure a custom TURN server? (Highly recommended to bypass firewalls and router loopbacks) [y/N]: " CONFIGURE_TURN
+TURN_URL=""
+TURN_USERNAME=""
+TURN_CREDENTIAL=""
+
+if [[ "$CONFIGURE_TURN" =~ ^[Yy]$ ]]; then
+    read -p "Enter TURN Server URL (e.g., turn:relay.metered.ca:80 or comma-separated list): " TURN_URL
+    read -p "Enter TURN Username: " TURN_USERNAME
+    read -p "Enter TURN Credential (Password): " TURN_CREDENTIAL
+    echo "Custom TURN server settings configured."
+else
+    echo "Using default fallback TURN server."
+fi
+echo ""
+
 # 1. Update package list and install initial utilities
 echo "--> 1/6 Updating packages and installing prerequisites..."
 sudo apt-get update && sudo apt-get upgrade -y
@@ -66,6 +82,11 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_SOCKET_URL=https://$DOMAIN
+$(if [ -n "$TURN_URL" ]; then
+echo "        - NEXT_PUBLIC_TURN_URL=$TURN_URL"
+echo "        - NEXT_PUBLIC_TURN_USERNAME=$TURN_USERNAME"
+echo "        - NEXT_PUBLIC_TURN_CREDENTIAL=$TURN_CREDENTIAL"
+fi)
     ports:
       - "3000:3000"
     depends_on:
