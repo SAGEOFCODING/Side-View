@@ -499,7 +499,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     });
 
     // --- Fullscreen detection (host side) ---
-    let fullscreenPollInterval: ReturnType<typeof setInterval> | null = null;
+    let fullscreenDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let lastFullscreenState = false;
 
     const emitFullscreenChange = (isFullscreen: boolean) => {
@@ -509,26 +509,35 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       socketRef.current?.emit('host_fullscreen_change', { roomId, isFullscreen });
     };
 
-    const handleFullscreenChange = () => {
-      emitFullscreenChange(!!document.fullscreenElement);
+    const handleFullscreenEvent = () => {
+      if (fullscreenDebounceTimer) clearTimeout(fullscreenDebounceTimer);
+      fullscreenDebounceTimer = setTimeout(() => {
+        emitFullscreenChange(!!document.fullscreenElement);
+      }, 100);
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    const handleF11Keydown = (e: KeyboardEvent) => {
+      if (e.key === 'F11') {
+        if (fullscreenDebounceTimer) clearTimeout(fullscreenDebounceTimer);
+        fullscreenDebounceTimer = setTimeout(() => {
+          // If toggling F11, invert current state or check document
+          const isFs = !lastFullscreenState;
+          emitFullscreenChange(isFs);
+        }, 100);
+      }
+    };
 
-    // F11 fallback: poll document.fullscreenElement every 500ms
-    // (F11 in some browsers doesn't fire fullscreenchange)
-    fullscreenPollInterval = setInterval(() => {
-      const isFs = !!document.fullscreenElement || (window.innerHeight === screen.height && window.innerWidth === screen.width);
-      emitFullscreenChange(isFs);
-    }, 500);
+    document.addEventListener('fullscreenchange', handleFullscreenEvent);
+    window.addEventListener('keydown', handleF11Keydown);
 
     return () => {
       console.log('[WebRTC] Cleaning up...');
       isSetupRef.current = false;
 
       // Clean up fullscreen listeners
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      if (fullscreenPollInterval) clearInterval(fullscreenPollInterval);
+      document.removeEventListener('fullscreenchange', handleFullscreenEvent);
+      window.removeEventListener('keydown', handleF11Keydown);
+      if (fullscreenDebounceTimer) clearTimeout(fullscreenDebounceTimer);
 
       if (screenTrackListenerRef.current) {
         const { track, handler } = screenTrackListenerRef.current;

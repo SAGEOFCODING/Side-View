@@ -49,11 +49,37 @@ export default function RoomPage() {
   
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isControlsVisible, setIsControlsVisible] = useState(true);
 
   // Set room ID on mount
   useEffect(() => {
     setRoomId(roomId);
   }, [roomId, setRoomId]);
+
+  // YouTube-style auto-hide controls in cinema mode
+  useEffect(() => {
+    if (!hostCinemaMode || cinemaOverrideOff) {
+      setIsControlsVisible(true);
+      return;
+    }
+    
+    setIsControlsVisible(true);
+    let timeout: ReturnType<typeof setTimeout>;
+    
+    const handleMouseMove = () => {
+      setIsControlsVisible(true);
+      clearTimeout(timeout);
+      timeout = setTimeout(() => setIsControlsVisible(false), 3000);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    timeout = setTimeout(() => setIsControlsVisible(false), 3000);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      clearTimeout(timeout);
+    };
+  }, [hostCinemaMode, cinemaOverrideOff]);
 
   // Load saved display name from localStorage on mount
   useEffect(() => {
@@ -232,7 +258,7 @@ export default function RoomPage() {
     Object.values(remoteUsers).find(u => u.screenStream)?.screenStream;
 
   return (
-    <main className={`relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col cinema-mode-transition ${isCinemaActive ? 'cinema-mode' : ''}`}>
+    <main className={`relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col cinema-mode-transition ${isCinemaActive ? 'yt-cinema' : ''} ${isCinemaActive && !isControlsVisible ? 'yt-controls-hidden' : ''}`}>
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0 cinema-bg-blobs">
         <div className="absolute top-1/4 left-1/4 w-[40vw] h-[40vw] bg-purple-600/10 rounded-full blur-[120px]" />
@@ -311,8 +337,7 @@ export default function RoomPage() {
         onClick={() => setCinemaOverrideOff(true)}
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-          <Minimize2 style={{ width: 14, height: 14 }} />
-          Exit Cinema Mode
+          ✕
         </span>
       </button>
 
