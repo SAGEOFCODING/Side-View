@@ -5,5 +5,3 @@ node_modules/
 dist/
 build/
 .vercel
-
-.vercel
