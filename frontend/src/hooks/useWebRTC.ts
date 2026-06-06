@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useStore } from '../store/useStore';
 
-const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://stream-backend-o7nw.onrender.com';
+const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://sageofcode.me';
 
 // ICE server configuration — TURN credentials loaded from environment
 function getIceServers() {
