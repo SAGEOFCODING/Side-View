@@ -103,11 +103,12 @@ export const VideoPlayer = React.memo(React.forwardRef<HTMLVideoElement, VideoPl
   return (
     <div className={className || ''}>
       {/* Single video element — handles both video and audio */}
-      {/* No muted attribute here — we control it via ref to avoid React's broken muted prop */}
+      {/* We MUST include muted={muted} in the JSX to satisfy iOS Safari/Chrome autoplay policies */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
+        muted={muted}
         className="w-full h-full object-cover"
       />
       {needsInteraction && (

@@ -9,6 +9,7 @@ function getIceServers() {
   const servers: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
   ];
 
   const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
@@ -163,31 +164,29 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       }
     };
 
-    // Handle incoming remote tracks
     pc.ontrack = (event) => {
       const track = event.track;
       const streamKey = `${type}-${targetUserId}`;
       console.log(`[WebRTC] Received remote ${type} track from ${targetUserId}: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}, readyState=${track.readyState}`);
       
-      // Get or create the accumulated stream for this connection
-      if (!remoteStreamsRef.current[streamKey]) {
-        remoteStreamsRef.current[streamKey] = event.streams[0] || new MediaStream();
-      }
-      const accumulatedStream = remoteStreamsRef.current[streamKey];
+      let stream = remoteStreamsRef.current[streamKey];
       
-      // Add the track if not already present
-      if (!accumulatedStream.getTrackById(track.id)) {
-        accumulatedStream.addTrack(track);
+      // If we haven't seen this stream before, initialize it and notify Zustand
+      if (!stream) {
+        stream = event.streams[0] || new MediaStream();
+        remoteStreamsRef.current[streamKey] = stream;
+        
+        if (type === 'webcam') {
+          setRemoteStream(targetUserId, stream);
+        } else {
+          setRemoteScreenStream(targetUserId, stream);
+        }
       }
       
-      // Create a new MediaStream from all accumulated tracks — forces Zustand to see a new object reference
-      const freshStream = new MediaStream(accumulatedStream.getTracks());
-      console.log(`[WebRTC] Updated ${type} stream for ${targetUserId}: videoTracks=${freshStream.getVideoTracks().length}, audioTracks=${freshStream.getAudioTracks().length}`);
-
-      if (type === 'webcam') {
-        setRemoteStream(targetUserId, freshStream);
-      } else {
-        setRemoteScreenStream(targetUserId, freshStream);
+      // If we are manually assembling the stream, add the track
+      // (calling addTrack fires the 'addtrack' event on the stream, which VideoPlayer listens to)
+      if (!stream.getTrackById(track.id)) {
+        stream.addTrack(track);
       }
     };
 
@@ -277,25 +276,23 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         const streamKey = `${connectionType}-${senderId}`;
         console.log(`[WebRTC] Received ${connectionType} track from incoming connection ${senderId}: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}, readyState=${track.readyState}`);
         
-        // Get or create the accumulated stream for this connection
-        if (!remoteStreamsRef.current[streamKey]) {
-          remoteStreamsRef.current[streamKey] = event.streams[0] || new MediaStream();
-        }
-        const accumulatedStream = remoteStreamsRef.current[streamKey];
+        let stream = remoteStreamsRef.current[streamKey];
         
-        // Add the track if not already present
-        if (!accumulatedStream.getTrackById(track.id)) {
-          accumulatedStream.addTrack(track);
+        // If we haven't seen this stream before, initialize it and notify Zustand
+        if (!stream) {
+          stream = event.streams[0] || new MediaStream();
+          remoteStreamsRef.current[streamKey] = stream;
+          
+          if (connectionType === 'webcam') {
+            setRemoteStream(senderId, stream);
+          } else {
+            setRemoteScreenStream(senderId, stream);
+          }
         }
         
-        // Create a new MediaStream from all accumulated tracks — forces Zustand to see a new object reference
-        const freshStream = new MediaStream(accumulatedStream.getTracks());
-        console.log(`[WebRTC] Updated ${connectionType} stream for incoming ${senderId}: videoTracks=${freshStream.getVideoTracks().length}, audioTracks=${freshStream.getAudioTracks().length}`);
-
-        if (connectionType === 'webcam') {
-          setRemoteStream(senderId, freshStream);
-        } else {
-          setRemoteScreenStream(senderId, freshStream);
+        // If we are manually assembling the stream, add the track
+        if (!stream.getTrackById(track.id)) {
+          stream.addTrack(track);
         }
       };
 

@@ -73,7 +73,7 @@ export const WebcamOverlay = React.memo(function WebcamOverlay({ stream, muted, 
         </div>
 
         {/* Firewall Blocked Overlay */}
-        {(iceStatus === 'failed' || iceStatus === 'disconnected') && !isLocal && (
+        {iceStatus === 'failed' && !isLocal && (
           <div className="absolute inset-0 bg-red-950/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-4 text-center border border-red-500/50 rounded-2xl">
             <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Firewall Blocked</span>
             <span className="text-[9px] text-zinc-300 leading-tight">TURN Server Required</span>
