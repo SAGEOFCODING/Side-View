@@ -25,23 +25,6 @@ function getIceServers() {
         credential: turnCredential,
       });
     }
-  } else {
-    // Fallback to public free OpenRelay TURN servers if no ENV vars are set
-    servers.push({
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    });
-    servers.push({
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    });
-    servers.push({
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    });
   }
 
   return servers;
