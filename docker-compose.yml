@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - NODE_ENV=production
+      - ALLOWED_ORIGINS=https://sageofcode.me
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_SOCKET_URL=https://sageofcode.me
+        - NEXT_PUBLIC_TURN_URL=turn:104.248.117.64:3478
+        - NEXT_PUBLIC_TURN_USERNAME=root
+        - NEXT_PUBLIC_TURN_CREDENTIAL=sideview123
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: always
