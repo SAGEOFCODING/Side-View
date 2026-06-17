@@ -219,3 +219,77 @@ button:focus-visible {
   transition: all 300ms ease;
 }
 
+/* ========================================
+   Manual Controls Hidden Mode
+   ======================================== */
+
+/* When controls are manually hidden, hide top bar, bottom controls, and webcams */
+.controls-hidden .cinema-status-bar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(-20px) !important;
+}
+
+.controls-hidden .cinema-controls {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(20px) !important;
+}
+
+.controls-hidden .cinema-webcam-container {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 300ms ease !important;
+}
+
+/* Enlarge the screen container when controls are manually hidden */
+.controls-hidden .cinema-screen-container {
+  max-width: 96vw !important;
+  max-height: 92vh !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 1.5rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Ensure video fits contain mode to prevent cropping of desktop text */
+.controls-hidden .cinema-screen-container video {
+  object-fit: contain !important;
+}
+
+/* Floating Show Controls button */
+.show-controls-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 120;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(24, 24, 27, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  transition: opacity 300ms ease, transform 300ms ease, background 200ms ease;
+}
+
+.show-controls-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.show-controls-btn.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+

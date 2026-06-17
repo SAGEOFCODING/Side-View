@@ -2,7 +2,17 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useStore } from '../store/useStore';
 
-const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://sageofcode.me';
+function getSocketUrl() {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001';
+    }
+  }
+  return process.env.NEXT_PUBLIC_SOCKET_URL || 'https://sageofcode.me';
+}
+
+const SOCKET_SERVER_URL = getSocketUrl();
 
 // ICE server configuration — TURN credentials loaded from environment
 function getIceServers() {
@@ -350,6 +360,9 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
+      extraHeaders: {
+        "bypass-tunnel-reminder": "true"
+      }
     });
     
     socketRef.current.on('connect', () => {
@@ -560,48 +573,62 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
   const startScreenShare = useCallback(async () => {
     let screenStream: MediaStream;
-    try {
-      // Tier 1: Try with explicit audio constraints for better cross-browser support
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          // @ts-expect-error -- Chrome-specific, allows system audio capture
-          suppressLocalAudioPlayback: false,
-        }
-      });
-    } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
-      console.warn('[WebRTC] Tier 1 explicit audio failed. Attempting Tier 2 (audio: true)...', error);
-      if (error.name === 'NotAllowedError') {
-        return;
-      }
-      
+    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
+    if (isElectron) {
       try {
-        // Tier 2: Try simple audio: true
         screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
+          video: true,
           audio: true
         });
-      } catch (err2: unknown) {
-        const error2 = err2 instanceof Error ? err2 : new Error('Unknown error');
-        console.warn('[WebRTC] Tier 2 audio:true failed. Attempting Tier 3 (video only)...', error2);
-        if (error2.name === 'NotAllowedError') {
+      } catch (err) {
+        console.error('[WebRTC] Electron screen capture failed:', err);
+        return;
+      }
+    } else {
+      try {
+        // Tier 1: Try with explicit audio constraints for better cross-browser support
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            // @ts-expect-error -- Chrome-specific, allows system audio capture
+            suppressLocalAudioPlayback: false,
+          }
+        });
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error('Unknown error');
+        console.warn('[WebRTC] Tier 1 explicit audio failed. Attempting Tier 2 (audio: true)...', error);
+        if (error.name === 'NotAllowedError') {
           return;
         }
-
+        
         try {
-          // Tier 3: Fallback to video only
+          // Tier 2: Try simple audio: true
           screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } },
-            audio: false
+            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
+            audio: true
           });
-          alert("Screen audio capture was blocked by your browser or OS (e.g., macOS Entire Screen). Continuing with video only.");
-        } catch (fallbackErr) {
-          console.error('[WebRTC] Fallback screen share failed:', fallbackErr);
-          return;
+        } catch (err2: unknown) {
+          const error2 = err2 instanceof Error ? err2 : new Error('Unknown error');
+          console.warn('[WebRTC] Tier 2 audio:true failed. Attempting Tier 3 (video only)...', error2);
+          if (error2.name === 'NotAllowedError') {
+            return;
+          }
+
+          try {
+            // Tier 3: Fallback to video only
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+              video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } },
+              audio: false
+            });
+            alert("Screen audio capture was blocked by your browser or OS (e.g., macOS Entire Screen). Continuing with video only.");
+          } catch (fallbackErr) {
+            console.error('[WebRTC] Fallback screen share failed:', fallbackErr);
+            return;
+          }
         }
       }
     }

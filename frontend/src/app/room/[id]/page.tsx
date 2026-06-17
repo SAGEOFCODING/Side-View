@@ -7,9 +7,10 @@ import { useWebRTC } from "@/hooks/useWebRTC";
 import { useStore } from "@/store/useStore";
 import { WebcamOverlay } from "@/components/WebcamOverlay";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { ScreenSharePicker } from "@/components/ScreenSharePicker";
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, StopCircle, 
-  Link, Check, LogIn, LogOut, Users, Wifi, WifiOff, Loader2, Minimize2 
+  Link, Check, LogIn, LogOut, Users, Wifi, WifiOff, Loader2, Minimize2, Eye, EyeOff 
 } from "lucide-react";
 
 // Connection status indicator — extracted to module level for React Compiler
@@ -50,6 +51,27 @@ export default function RoomPage() {
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
+  const [isControlsHidden, setIsControlsHidden] = useState(false);
+  
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSources, setPickerSources] = useState<any[]>([]);
+
+  // Listen for Electron screen picker events
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      (window as any).electronAPI.onShowScreenPicker((sources: any[]) => {
+        setPickerSources(sources);
+        setPickerOpen(true);
+      });
+    }
+  }, []);
+
+  const handleSelectScreenSource = (sourceId: string | null) => {
+    setPickerOpen(false);
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      (window as any).electronAPI.selectScreenSource(sourceId);
+    }
+  };
 
   // Set room ID on mount
   useEffect(() => {
@@ -132,6 +154,9 @@ export default function RoomPage() {
         case 'v':
           toggleVideo();
           break;
+        case 'h':
+          setIsControlsHidden(prev => !prev);
+          break;
         case 'escape':
           handleLeaveRoom();
           break;
@@ -180,7 +205,13 @@ export default function RoomPage() {
   };
 
   const copyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
+    let url = window.location.href;
+    // Convert local URL to public room URL so friends can join from their web browsers
+    if (url.includes("localhost:3000") || url.includes("127.0.0.1:3000")) {
+      const publicUrl = process.env.NEXT_PUBLIC_PUBLIC_URL || "https://sageofcode.me";
+      url = url.replace(/http:\/\/(localhost|127\.0\.0\.1):3000/, publicUrl);
+    }
+    navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -258,7 +289,7 @@ export default function RoomPage() {
     Object.values(remoteUsers).find(u => u.screenStream)?.screenStream;
 
   return (
-    <main className={`relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col cinema-mode-transition ${isCinemaActive ? 'yt-fullscreen' : ''} ${isCinemaActive && !isControlsVisible ? 'yt-controls-hidden' : ''}`}>
+    <main className={`relative flex-1 bg-black w-full h-full overflow-hidden flex flex-col cinema-mode-transition ${isCinemaActive ? 'yt-fullscreen' : ''} ${isCinemaActive && !isControlsVisible ? 'yt-controls-hidden' : ''} ${isControlsHidden ? 'controls-hidden' : ''}`}>
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0 cinema-bg-blobs">
         <div className="absolute top-1/4 left-1/4 w-[40vw] h-[40vw] bg-purple-600/10 rounded-full blur-[120px]" />
@@ -324,6 +355,8 @@ export default function RoomPage() {
               <span className="hidden md:inline">to mute ·</span>
               <kbd className="hidden md:inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono border border-zinc-700">V</kbd>
               <span className="hidden md:inline">for video ·</span>
+              <kbd className="hidden md:inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono border border-zinc-700">H</kbd>
+              <span className="hidden md:inline">to toggle controls ·</span>
               <kbd className="hidden md:inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono border border-zinc-700">Esc</kbd>
               <span className="hidden md:inline">to leave</span>
             </div>
@@ -422,6 +455,17 @@ export default function RoomPage() {
           <div className="w-px h-8 bg-white/10" />
 
           <button 
+            id="hide-controls-btn"
+            onClick={() => setIsControlsHidden(true)}
+            className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all"
+            title="Hide controls (H)"
+          >
+            <EyeOff className="w-5 h-5 md:w-6 md:h-6" />
+          </button>
+
+          <div className="w-px h-8 bg-white/10" />
+
+          <button 
             id="copy-link-btn"
             onClick={copyLink}
             className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all"
@@ -440,6 +484,20 @@ export default function RoomPage() {
           </button>
         </div>
       </div>
+      <ScreenSharePicker 
+        isOpen={pickerOpen} 
+        sources={pickerSources} 
+        onSelect={handleSelectScreenSource} 
+      />
+
+      {/* Floating Show Controls Button (visible when controls are hidden) */}
+      <button
+        onClick={() => setIsControlsHidden(false)}
+        className={`show-controls-btn ${isControlsHidden ? 'visible' : ''}`}
+        title="Show controls (H)"
+      >
+        <Eye className="w-6 h-6 text-white" />
+      </button>
     </main>
   );
 }
