@@ -222,7 +222,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     }
   }, [setRemoteStream, setRemoteScreenStream]);
 
-  const handleSignalingMessage = useCallback(async (senderId: string, signal: any) => {
+  const handleSignalingMessage = useCallback(async (senderId: string, signal: { type: any; sdp?: string; candidate?: RTCIceCandidateInit; connectionType: 'webcam' | 'screen' }) => {
     const { type, sdp, candidate, connectionType } = signal;
     
     const connections = connectionType === 'webcam' ? webcamConnectionsRef : screenConnectionsRef;
@@ -241,7 +241,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
         if (!pendingCandidatesRef.current[key]) {
           pendingCandidatesRef.current[key] = [];
         }
-        pendingCandidatesRef.current[key].push(candidate);
+        pendingCandidatesRef.current[key].push(candidate!);
         console.log(`[WebRTC] Queued ICE candidate from ${senderId} (${connectionType})`);
       }
       return;
@@ -517,6 +517,9 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
     document.addEventListener('fullscreenchange', handleFullscreenEvent);
     window.addEventListener('keydown', handleF11Keydown);
 
+    const currentWebcamConnections = webcamConnectionsRef.current;
+    const currentScreenConnections = screenConnectionsRef.current;
+
     return () => {
       console.log('[WebRTC] Cleaning up...');
       isSetupRef.current = false;
@@ -533,8 +536,8 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
       }
 
       // Close all active connections (also cleans up audio elements)
-      Object.keys(webcamConnectionsRef.current).forEach(userId => closeConnection(userId, 'webcam'));
-      Object.keys(screenConnectionsRef.current).forEach(userId => closeConnection(userId, 'screen'));
+      Object.keys(currentWebcamConnections).forEach(userId => closeConnection(userId, 'webcam'));
+      Object.keys(currentScreenConnections).forEach(userId => closeConnection(userId, 'screen'));
 
       remoteStreamsRef.current = {};
 
@@ -567,7 +570,7 @@ export function useWebRTC(roomId: string, shouldConnect: boolean) {
 
   const startScreenShare = useCallback(async () => {
     let screenStream: MediaStream;
-    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+    const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 
     if (isElectron) {
       try {

@@ -10,7 +10,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { ScreenSharePicker } from "@/components/ScreenSharePicker";
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, StopCircle, 
-  Link, Check, LogIn, LogOut, Users, Wifi, WifiOff, Loader2, Minimize2, Eye, EyeOff 
+  Link, Check, LogIn, LogOut, Users, Wifi, WifiOff, Loader2, Eye, EyeOff 
 } from "lucide-react";
 
 // Connection status indicator — extracted to module level for React Compiler
@@ -54,12 +54,12 @@ export default function RoomPage() {
   const [isControlsHidden, setIsControlsHidden] = useState(false);
   
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerSources, setPickerSources] = useState<any[]>([]);
+  const [pickerSources, setPickerSources] = useState<Array<{ id: string, name: string, thumbnail: string }>>([]);
 
   // Listen for Electron screen picker events
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
-      (window as any).electronAPI.onShowScreenPicker((sources: any[]) => {
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.onShowScreenPicker((sources: Array<{ id: string, name: string, thumbnail: string }>) => {
         setPickerSources(sources);
         setPickerOpen(true);
       });
@@ -68,8 +68,8 @@ export default function RoomPage() {
 
   const handleSelectScreenSource = (sourceId: string | null) => {
     setPickerOpen(false);
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
-      (window as any).electronAPI.selectScreenSource(sourceId);
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.selectScreenSource(sourceId);
     }
   };
 
@@ -81,11 +81,11 @@ export default function RoomPage() {
   // YouTube-style auto-hide controls in cinema mode
   useEffect(() => {
     if (!hostCinemaMode || cinemaOverrideOff) {
-      setIsControlsVisible(true);
+      queueMicrotask(() => setIsControlsVisible(true));
       return;
     }
     
-    setIsControlsVisible(true);
+    queueMicrotask(() => setIsControlsVisible(true));
     let timeout: ReturnType<typeof setTimeout>;
     
     const handleMouseMove = () => {
@@ -176,7 +176,8 @@ export default function RoomPage() {
     // By creating and playing a silent AudioContext here (during the click), we permanently
     // unlock audio for all future WebRTC streams that arrive seconds/minutes later.
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx!();
       const buffer = ctx.createBuffer(1, 1, 22050);
       const source = ctx.createBufferSource();
       source.buffer = buffer;

@@ -22,7 +22,7 @@ export function ScreenSharePicker({ isOpen, sources, onSelect }: ScreenSharePick
   // Reset tab when modal opens
   useEffect(() => {
     if (isOpen) {
-      setActiveTab("screens");
+      queueMicrotask(() => setActiveTab("screens"));
     }
   }, [isOpen]);
 

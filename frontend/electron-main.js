@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { app, BrowserWindow, ipcMain, desktopCapturer, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -11,7 +12,7 @@ let nextServerProcess = null;
 global.pendingScreenShareCallback = null;
 
 function checkServerReady(port, callback) {
-  const req = http.get(`http://localhost:${port}/`, (res) => {
+  const req = http.get(`http://localhost:${port}/`, () => {
     callback(true);
   });
   req.on('error', () => {

@@ -10,7 +10,7 @@ export function TitleBar() {
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.electron) {
-      setIsElectron(true);
+      queueMicrotask(() => setIsElectron(true));
       document.body.classList.add("is-electron");
 
       // Get initial states from main process

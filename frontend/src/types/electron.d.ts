@@ -10,7 +10,7 @@ interface Window {
     onAlwaysOnTopChanged: (callback: (isAlwaysOnTop: boolean) => void) => () => void;
   };
   electronAPI?: {
-    onShowScreenPicker: (callback: (sources: any[]) => void) => void;
+    onShowScreenPicker: (callback: (sources: Array<{ id: string, name: string, thumbnail: string }>) => void) => void;
     selectScreenSource: (sourceId: string | null) => void;
   };
 }

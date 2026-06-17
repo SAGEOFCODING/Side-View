@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Volume2 } from 'lucide-react';
+import { Volume2 } from 'lucide-react';
 
 interface VideoPlayerProps {
   stream: MediaStream | null;
